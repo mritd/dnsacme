@@ -17,7 +17,7 @@ tasks:
 
   build-dnsacme:
     desc: Build dnsacme
-    label: build-dnsacme-{{.TASK}}
+    label: build-{{.TASK}}
     vars:
       DNSACME_COMMIT:
         sh: git rev-parse HEAD
@@ -25,8 +25,8 @@ tasks:
       - task: mkdir
       - |
         GOOS={{.GOOS}} GOARCH={{.GOARCH}} GOARM={{.GOARM}} GOMIPS={{.GOMIPS}} \
-        go build -trimpath -o build/dnsacme-{{.PLATFORM}} -ldflags \
-        "-w -s -X main.commit={{.DNSACME_COMMIT}}"
+        go build -trimpath -o build/dnsacme-{{.TASK}} -ldflags \
+        "-w -s -X main.commit={{.DNSACME_COMMIT}}" {{.CLI_ARGS}}
 
   linux-386:
     desc: Build dnsacme(linux/386)
@@ -57,7 +57,7 @@ tasks:
           GOAMD64: v3
         }
   linux-amd64-v4:
-    desc: Build dnsacme(linux/amd64-v3)
+    desc: Build dnsacme(linux/amd64-v4)
     cmds:
       - task: build-dnsacme
         vars: {
