@@ -6,7 +6,6 @@ type Config struct {
 	TestMode      bool
 	Domains       []string
 	Email         string
-	CertFile      string
 	ZeroSSLCA     bool
 	StorageDir    string
 	KeyType       string

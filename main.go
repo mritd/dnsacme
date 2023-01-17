@@ -56,16 +56,18 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&conf.TestMode, "test", false, "Use Let's Encrypt Staging CA to test")
 	rootCmd.PersistentFlags().StringSliceVarP(&conf.Domains, "domain", "d", nil, "ACME cert domains")
 	rootCmd.PersistentFlags().StringVarP(&conf.Email, "email", "m", "caddy@zerossl.com", "ACME email")
-	rootCmd.PersistentFlags().StringVarP(&conf.CertFile, "cert-file", "f", "/etc/acme/domain.cer", "ACME cert store location")
-	rootCmd.PersistentFlags().BoolVar(&conf.ZeroSSLCA, "zerossl", true, "Obtain cert with ZeroSSL CA")
 	rootCmd.PersistentFlags().StringVar(&conf.StorageDir, "dir", dataDir(), "ACME cert status storage directory")
 	rootCmd.PersistentFlags().StringVarP(&conf.KeyType, "key-type", "t", "P384", "ACME cert key type")
 	rootCmd.PersistentFlags().StringVarP(&conf.DNSProvider, "dns", "p", "", "ACME DNS provider")
 	rootCmd.PersistentFlags().StringToStringVar(&conf.DNSConfig, "dns-config", map[string]string{}, "ACME DNS provider config map")
+	rootCmd.PersistentFlags().BoolVar(&conf.ZeroSSLCA, "zerossl", true, "Obtain cert with ZeroSSL CA")
 	rootCmd.PersistentFlags().StringVar(&conf.ObtainingHook, "obtaining-hook", "", "CertMagic obtaining hook command")
 	rootCmd.PersistentFlags().StringVar(&conf.ObtainedHook, "obtained-hook", "", "CertMagic obtained hook command")
 	rootCmd.PersistentFlags().StringVar(&conf.FailedHook, "failed-hook", "", "CertMagic obtain failed hook command")
 	rootCmd.PersistentFlags().BoolVar(&listProviders, "list-providers", false, "List supported DNS providers")
+
+	rootCmd.Flags().SortFlags = false
+	rootCmd.PersistentFlags().SortFlags = false
 }
 
 func dataDir() string {
