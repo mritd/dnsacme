@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+
+echo "ENV: ACME_IDENTIFIER -> ${ACME_IDENTIFIER}"
+echo "ENV: ACME_KEY_PATH -> ${ACME_KEY_PATH}"
+echo "ENV: ACME_CERT_PATH -> ${ACME_CERT_PATH}"
