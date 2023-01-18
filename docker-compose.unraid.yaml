@@ -1,0 +1,12 @@
+version: '3.9'
+services:
+  dnsacme:
+    image: mritd/dnsacme:unraid
+    container_name: dnsacme
+    restart: unless-stopped
+    network_mode: "host"
+    env_file: .env
+    volumes:
+      - /mnt/user/composes/dnsacme:/data
+      - /boot/config/ssl/certs:/host_certs
+      - /root/.ssh:/host_ssh
