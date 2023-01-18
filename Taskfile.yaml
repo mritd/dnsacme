@@ -154,7 +154,7 @@ tasks:
           GOARCH: mips64le
         }
 
-  default:
+  release:
     cmds:
       - task: clean
       - task: linux-386
@@ -169,3 +169,10 @@ tasks:
       - task: linux-mipsle-softfloat
       - task: linux-mips64
       - task: linux-mips64le
+
+  default:
+    cmds:
+      - task: build-dnsacme
+        vars: {
+          TASK: "local"
+        }
