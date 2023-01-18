@@ -37,7 +37,7 @@ func Obtain(conf *Config) {
 
 	magic := &certmagic.Config{
 		RenewalWindowRatio: certmagic.DefaultRenewalWindowRatio,
-		KeySource:          certmagic.StandardKeyGenerator{KeyType: certmagic.KeyType(strings.ToLower(conf.KeyType))},
+		KeySource:          certmagic.StandardKeyGenerator{KeyType: certmagic.KeyType(conf.KeyType)},
 		Storage:            &certmagic.FileStorage{Path: conf.StorageDir},
 		Logger:             acmeLogger,
 		OnEvent:            OnEvent(conf),

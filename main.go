@@ -122,8 +122,8 @@ func initConfig(cmd *cobra.Command, _ []string) {
 
 	conf.StorageDir = viper.GetString("storage-dir")
 
-	conf.KeyType = viper.GetString("key-type")
-	switch strings.ToLower(conf.KeyType) {
+	conf.KeyType = strings.ToLower(viper.GetString("key-type"))
+	switch conf.KeyType {
 	case "ed25519":
 	case "p256":
 	case "p384":
