@@ -146,6 +146,8 @@ func initConfig(cmd *cobra.Command, _ []string) {
 		logrus.Fatal("ACME DNS Provider config is empty")
 	}
 
+	conf.ZeroSSLCA = viper.GetBool("zerossl")
+
 	conf.ObtainingHook = viper.GetString("obtaining-hook")
 	if conf.ObtainingHook != "" && len(strings.Fields(conf.ObtainingHook)) != 1 {
 		_ = cmd.Help()
