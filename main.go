@@ -94,11 +94,11 @@ func dataDir() string {
 		basedir, err = os.UserConfigDir()
 		if err != nil {
 			logrus.Error(err)
-			return "./dnsacme"
+			return "./certmagic"
 		}
 	}
 
-	return filepath.Join(basedir, "dnsacme")
+	return filepath.Join(basedir, "certmagic")
 }
 
 func initConfig(cmd *cobra.Command, _ []string) {
