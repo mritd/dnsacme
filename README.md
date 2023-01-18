@@ -29,7 +29,7 @@ Flags:
       --test                        Use Let's Encrypt Staging CA to test
   -d, --domain strings              ACME cert domains
   -m, --email string                ACME email (default "caddy@zerossl.com")
-      --dir string                  ACME cert status storage directory (default "/Users/kovacs/Library/Application Support/dnsacme")
+      --storage-dir string          ACME cert status storage directory (default "/Users/kovacs/Library/Application Support/dnsacme")
   -t, --key-type string             ACME cert key type (default "P384")
   -p, --dns string                  ACME DNS provider
       --dns-config stringToString   ACME DNS provider config map (default [])
@@ -131,5 +131,25 @@ Other DNS providers can be deleted by specifying the DNS provider at compile tim
 # Only include godaddy and cloudflare DNS providers
 go build -trimpath -ldflags '-w -s' -tags=slim,godaddy,cloudflare
 ```
+
+### ENV Config
+
+Some users may need to use environment variables to define configuration, for example in the dcoker container.
+dnsacme uses environment variables prefixed with `ACME_`, which are defined as follows:
+
+| ENV KEY               | FLAG             | Example                                                        |
+|-----------------------|------------------|----------------------------------------------------------------|
+| `ACME_TEST`           | `--test`         | `true`                                                         |
+| `ACME_DOMAIN`         | `--domain`       | `a.example.com b.example.com`                                  |
+| `ACME_STORAGE_DIR`    | `--storage-dir`  | `/tpm/acme`                                                    |
+| `ACME_KEY_TYPE`       | `--key-type`     | `rsa8192`                                                      |
+| `ACME_DNS_PROVIDER`   | `--dns`          | `alidns`                                                       |
+| `ACME_DNS_CONFIG`     | `--dns-config`   | `{"ALIDNS_ACCKEYID": "xxxxx", "ALIDNS_ACCKEYSECRET": "xxxxx"}` |
+| `ACME_ZEROSSL`        | `--zerossl`      | `true`                                                         |
+| `ACME_OBTAINING_HOOK` | `obtaining-hook` | `/opt/scripts/acme-obtaining-hook.sh`                          |
+| `ACME_OBTAINED_HOOK`  | `obtained-hook`  | `/opt/scripts/acme-obtained-hook.sh`                           |
+| `ACME_FAILED_HOOK`    | `failed-hook`    | `/opt/scripts/acme-failed-hook.sh`                             |
+
+
 
 

@@ -7,6 +7,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/spf13/viper"
+
 	_ "github.com/mritd/logrus"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -23,7 +25,7 @@ var rootCmd = &cobra.Command{
 	Short:   "Simple tool to manage ACME Cert(Ony Supported DNS-01)",
 	Example: "  dnsacme --test --domain='*.example.com' --dns=cloudflare --dns-config=CLOUDFLARE_API_TOKEN=xxxxxxxxxxxxxx",
 	Version: commit,
-	PreRun:  preCheck,
+	PreRun:  initConfig,
 	Run: func(cmd *cobra.Command, args []string) {
 
 		// Print the currently supported DNS Providers
@@ -53,21 +55,35 @@ func main() {
 }
 
 func init() {
-	rootCmd.PersistentFlags().BoolVar(&conf.TestMode, "test", false, "Use Let's Encrypt Staging CA to test")
-	rootCmd.PersistentFlags().StringSliceVarP(&conf.Domains, "domain", "d", nil, "ACME cert domains")
-	rootCmd.PersistentFlags().StringVarP(&conf.Email, "email", "m", "caddy@zerossl.com", "ACME email")
-	rootCmd.PersistentFlags().StringVar(&conf.StorageDir, "dir", dataDir(), "ACME cert status storage directory")
-	rootCmd.PersistentFlags().StringVarP(&conf.KeyType, "key-type", "t", "P384", "ACME cert key type")
-	rootCmd.PersistentFlags().StringVarP(&conf.DNSProvider, "dns", "p", "", "ACME DNS provider")
-	rootCmd.PersistentFlags().StringToStringVar(&conf.DNSConfig, "dns-config", map[string]string{}, "ACME DNS provider config map")
-	rootCmd.PersistentFlags().BoolVar(&conf.ZeroSSLCA, "zerossl", true, "Obtain cert with ZeroSSL CA")
-	rootCmd.PersistentFlags().StringVar(&conf.ObtainingHook, "obtaining-hook", "", "CertMagic obtaining hook command")
-	rootCmd.PersistentFlags().StringVar(&conf.ObtainedHook, "obtained-hook", "", "CertMagic obtained hook command")
-	rootCmd.PersistentFlags().StringVar(&conf.FailedHook, "failed-hook", "", "CertMagic obtain failed hook command")
-	rootCmd.PersistentFlags().BoolVar(&listProviders, "list-providers", false, "List supported DNS providers")
+	rootCmd.PersistentFlags().Bool("test", false, "Use Let's Encrypt Staging CA to test")
+	rootCmd.PersistentFlags().StringSliceP("domain", "d", nil, "ACME cert domains")
+	rootCmd.PersistentFlags().StringP("email", "m", "caddy@zerossl.com", "ACME email")
+	rootCmd.PersistentFlags().String("storage-dir", dataDir(), "ACME cert status storage directory")
+	rootCmd.PersistentFlags().StringP("key-type", "t", "P384", "ACME cert key type")
+	rootCmd.PersistentFlags().StringP("dns", "p", "", "ACME DNS provider")
+	rootCmd.PersistentFlags().StringToString("dns-config", map[string]string{}, "ACME DNS provider config map")
+	rootCmd.PersistentFlags().Bool("zerossl", true, "Obtain cert with ZeroSSL CA")
+	rootCmd.PersistentFlags().String("obtaining-hook", "", "CertMagic obtaining hook command")
+	rootCmd.PersistentFlags().String("obtained-hook", "", "CertMagic obtained hook command")
+	rootCmd.PersistentFlags().String("failed-hook", "", "CertMagic obtain failed hook command")
+	rootCmd.PersistentFlags().Bool("list-providers", false, "List supported DNS providers")
 
 	rootCmd.Flags().SortFlags = false
 	rootCmd.PersistentFlags().SortFlags = false
+
+	_ = viper.BindEnv("test", "ACME_TEST")
+	_ = viper.BindEnv("domain", "ACME_DOMAIN")
+	_ = viper.BindEnv("storage-dir", "ACME_STORAGE_DIR")
+	_ = viper.BindEnv("key-type", "ACME_KEY_TYPE")
+	_ = viper.BindEnv("dns", "ACME_DNS_PROVIDER")
+	_ = viper.BindEnv("dns-config", "ACME_DNS_CONFIG")
+	_ = viper.BindEnv("zerossl", "ACME_ZEROSSL")
+	_ = viper.BindEnv("obtaining-hook", "ACME_OBTAINING_HOOK")
+	_ = viper.BindEnv("obtained-hook", "ACME_OBTAINED_HOOK")
+	_ = viper.BindEnv("failed-hook", "ACME_FAILED_HOOK")
+
+	_ = viper.BindPFlags(rootCmd.PersistentFlags())
+
 }
 
 func dataDir() string {
@@ -85,41 +101,28 @@ func dataDir() string {
 	return filepath.Join(basedir, "dnsacme")
 }
 
-// preCheck Check the necessary configuration before running
-func preCheck(cmd *cobra.Command, _ []string) {
+func initConfig(cmd *cobra.Command, _ []string) {
 	if listProviders {
 		return
 	}
 
+	conf.TestMode = viper.GetBool("test")
+
+	conf.Domains = viper.GetStringSlice("domain")
 	if conf.Domains == nil || len(conf.Domains) == 0 {
 		_ = cmd.Help()
 		logrus.Fatal("ACME Domain is empty")
 	}
+
+	conf.Email = viper.GetString("email")
 	if conf.Email == "" {
 		_ = cmd.Help()
 		logrus.Fatal("ACME Email is empty")
 	}
-	if conf.DNSProvider == "" {
-		_ = cmd.Help()
-		logrus.Fatal("ACME DNS Provider is empty")
-	}
-	if conf.DNSConfig == nil || len(conf.DNSConfig) == 0 {
-		_ = cmd.Help()
-		logrus.Fatal("ACME DNS Provider config is empty")
-	}
-	if conf.ObtainingHook != "" && len(strings.Fields(conf.ObtainingHook)) != 1 {
-		_ = cmd.Help()
-		logrus.Fatalf("Obtaining Hook does not support parameter parsing: [%s]", conf.ObtainingHook)
-	}
-	if conf.ObtainedHook != "" && len(strings.Fields(conf.ObtainedHook)) != 1 {
-		_ = cmd.Help()
-		logrus.Fatalf("Obtained Hook does not support parameter parsing: [%s]", conf.ObtainedHook)
-	}
-	if conf.FailedHook != "" && len(strings.Fields(conf.FailedHook)) != 1 {
-		_ = cmd.Help()
-		logrus.Fatalf("Failed Hook does not support parameter parsing: [%s]", conf.FailedHook)
-	}
 
+	conf.StorageDir = viper.GetString("storage-dir")
+
+	conf.KeyType = viper.GetString("key-type")
 	switch strings.ToLower(conf.KeyType) {
 	case "ed25519":
 	case "p256":
@@ -129,5 +132,35 @@ func preCheck(cmd *cobra.Command, _ []string) {
 	case "rsa8192":
 	default:
 		logrus.Fatalf("Unsupported KeyType: %s", conf.keyType)
+	}
+
+	conf.DNSProvider = viper.GetString("dns")
+	if conf.DNSProvider == "" {
+		_ = cmd.Help()
+		logrus.Fatal("ACME DNS Provider is empty")
+	}
+
+	conf.DNSConfig = viper.GetStringMapString("dns-config")
+	if conf.DNSConfig == nil || len(conf.DNSConfig) == 0 {
+		_ = cmd.Help()
+		logrus.Fatal("ACME DNS Provider config is empty")
+	}
+
+	conf.ObtainingHook = viper.GetString("obtaining-hook")
+	if conf.ObtainingHook != "" && len(strings.Fields(conf.ObtainingHook)) != 1 {
+		_ = cmd.Help()
+		logrus.Fatalf("Obtaining Hook does not support parameter parsing: [%s]", conf.ObtainingHook)
+	}
+
+	conf.ObtainedHook = viper.GetString("obtained-hook")
+	if conf.ObtainedHook != "" && len(strings.Fields(conf.ObtainedHook)) != 1 {
+		_ = cmd.Help()
+		logrus.Fatalf("Obtained Hook does not support parameter parsing: [%s]", conf.ObtainedHook)
+	}
+
+	conf.FailedHook = viper.GetString("failed-hook")
+	if conf.FailedHook != "" && len(strings.Fields(conf.FailedHook)) != 1 {
+		_ = cmd.Help()
+		logrus.Fatalf("Failed Hook does not support parameter parsing: [%s]", conf.FailedHook)
 	}
 }

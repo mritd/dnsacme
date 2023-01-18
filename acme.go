@@ -73,7 +73,7 @@ func Obtain(conf *Config) {
 
 	magic = certmagic.New(cache, *magic)
 	if err = magic.ManageSync(context.Background(), conf.Domains); err != nil {
-		logrus.Error(err)
+		logrus.Fatalf("Failed to Obtain Cert: %s", err)
 	}
 
 	for _, domain := range conf.Domains {
