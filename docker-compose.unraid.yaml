@@ -6,6 +6,8 @@ services:
     restart: unless-stopped
     network_mode: "host"
     env_file: .env
+    labels:
+      - "net.unraid.docker.icon=https://github.com/mritd/dnsacme/raw/main/logo.png"
     volumes:
       - /mnt/user/composes/dnsacme:/data
       - /boot/config/ssl/certs:/host_certs
