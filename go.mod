@@ -15,7 +15,7 @@ require (
 	github.com/libdns/namesilo v0.1.0
 	github.com/libdns/vultr v1.0.0
 	github.com/mritd/logrus v0.0.0-20221230124220-8f8f573eb651
-	github.com/sirupsen/logrus v1.9.0
+	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/cobra v1.6.1
 	github.com/spf13/viper v1.14.0
 	go.uber.org/zap v1.24.0
