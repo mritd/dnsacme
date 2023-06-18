@@ -216,8 +216,6 @@ github.com/libdns/libdns v0.2.2-0.20230227175549-2dc480633939 h1:EvTiXkv78P20yfk
 github.com/libdns/libdns v0.2.2-0.20230227175549-2dc480633939/go.mod h1:4Bj9+5CQiNMVGf87wjX4CY3HQJypUHRuLvlsfsZqLWQ=
 github.com/libdns/namedotcom v0.3.3 h1:R10C7+IqQGVeC4opHHMiFNBxdNBg1bi65ZwqLESl+jE=
 github.com/libdns/namedotcom v0.3.3/go.mod h1:GbYzsAF2yRUpI0WgIK5fs5UX+kDVUPaYCFLpTnKQm0s=
-github.com/libdns/namesilo v0.1.0 h1:0cNGxzxa1NEfI9Dv+f4cINVfVEAraY6b1HhioSCEn/U=
-github.com/libdns/namesilo v0.1.0/go.mod h1:xTTU8rez2sKUIEZTnhAfhuT+IytfspUS486pwHVa+1k=
 github.com/libdns/vultr v1.0.0 h1:W8B4+k2bm9ro3bZLSZV9hMOQI+uO6Svu+GmD+Olz7ZI=
 github.com/libdns/vultr v1.0.0/go.mod h1:8K1HJExcbeHS4YPkFHRZpqpXZzZ+DZAA0m0VikJgEqk=
 github.com/magiconair/properties v1.8.7 h1:IeQXZAiQcpL9mgcAe1Nu6cX9LLw6ExEHKjN0VQdvPDY=

@@ -12,7 +12,7 @@ require (
 	github.com/libdns/gandi v1.0.2
 	github.com/libdns/godaddy v1.0.3
 	github.com/libdns/namedotcom v0.3.3
-	github.com/libdns/namesilo v0.1.0
+	//github.com/libdns/namesilo v0.1.1-0.20220905023453-0b05164024d7
 	github.com/libdns/vultr v1.0.0
 	github.com/mritd/logrus v0.0.0-20221230124220-8f8f573eb651
 	github.com/sirupsen/logrus v1.9.3
