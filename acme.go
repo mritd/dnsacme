@@ -50,19 +50,17 @@ func Obtain(conf *Config) {
 		Agreed:                  true,
 		DisableHTTPChallenge:    true,
 		DisableTLSALPNChallenge: true,
-		CA:                      certmagic.LetsEncryptProductionCA,
-		TestCA:                  certmagic.ZeroSSLProductionCA,
 		Email:                   conf.Email,
 		DNS01Solver:             &certmagic.DNS01Solver{DNSProvider: dnsProvider},
 		Logger:                  acmeLogger,
 	})
 
-	if !conf.ZeroSSLCA {
+	if conf.ZeroSSLCA {
+		issuer.CA = certmagic.ZeroSSLProductionCA
+		issuer.TestCA = certmagic.ZeroSSLProductionCA
+	} else {
 		issuer.CA = certmagic.LetsEncryptProductionCA
-	}
-
-	if conf.TestMode {
-		issuer.CA = certmagic.LetsEncryptStagingCA
+		issuer.TestCA = certmagic.LetsEncryptStagingCA
 	}
 
 	magic.Issuers = []certmagic.Issuer{issuer}
