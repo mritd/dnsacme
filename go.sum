@@ -203,8 +203,8 @@ github.com/libdns/cloudflare v0.1.0 h1:93WkJaGaiXCe353LHEP36kAWCUw0YjFqwhkBkU2/i
 github.com/libdns/cloudflare v0.1.0/go.mod h1:a44IP6J1YH6nvcNl1PverfJviADgXUnsozR3a7vBKN8=
 github.com/libdns/dnspod v0.0.3 h1:xJHDIujgLjvZnpB8/rMoCHUqA/KxSGBqRUXxSIzNzAA=
 github.com/libdns/dnspod v0.0.3/go.mod h1:XLnqMmK7QlLPEbHwcOxbRvlzRvDgaaUlthRNFOPjXPI=
-github.com/libdns/duckdns v0.1.1 h1:wkgu98DkwpjduH2fxC2YkCiNkNnfQiHaYskMkEyRZ28=
-github.com/libdns/duckdns v0.1.1/go.mod h1:jCQ/7+qvhLK39+28qXvKEYGBBvmHBCmIwNqdJTCUmVs=
+github.com/libdns/duckdns v0.2.0 h1:vd3pE09G2qTx1Zh1o3LmrivWSByD3Z5FbL7csX5vDgE=
+github.com/libdns/duckdns v0.2.0/go.mod h1:jCQ/7+qvhLK39+28qXvKEYGBBvmHBCmIwNqdJTCUmVs=
 github.com/libdns/gandi v1.0.2 h1:1Ts8UpI1x5PVKpOjKC7Dn4+EObndz9gm6vdZnloHSKQ=
 github.com/libdns/gandi v1.0.2/go.mod h1:hxpbQKcQFgQrTS5lV4tAgn6QoL6HcCnoBJaW5nOW4Sk=
 github.com/libdns/godaddy v1.0.3 h1:PX1FOYDQ1HGQzz8mVOmtwm3aa6Sv5MwCkNzivUUTA44=
