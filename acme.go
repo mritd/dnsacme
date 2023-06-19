@@ -2,11 +2,17 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
+
+	"github.com/mholt/acmez/acme"
 
 	"github.com/caddyserver/certmagic"
 	"github.com/sirupsen/logrus"
@@ -57,6 +63,7 @@ func Obtain(conf *Config) {
 
 	if conf.ZeroSSLCA {
 		issuer.CA = certmagic.ZeroSSLProductionCA
+		issuer.ExternalAccount = generateEABCredentials(conf.Email)
 	} else {
 		issuer.CA = certmagic.LetsEncryptProductionCA
 	}
@@ -82,4 +89,49 @@ func Obtain(conf *Config) {
 
 	<-ctx.Done()
 	logrus.Info("DNS ACME Exit.")
+}
+
+func generateEABCredentials(email string) *acme.EAB {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	endpoint := "https://api.zerossl.com/acme/eab-credentials-email"
+	body := strings.NewReader(url.Values{"email": []string{email}}.Encode())
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, body)
+	if err != nil {
+		logrus.Fatalf("failed to creare ZeroSSL EAB Request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("User-Agent", certmagic.UserAgent)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		logrus.Fatalf("failed to create ZeroSSL EAB: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var result struct {
+		Success bool `json:"success"`
+		Error   struct {
+			Code int    `json:"code"`
+			Type string `json:"type"`
+		} `json:"error"`
+		EABKID     string `json:"eab_kid"`
+		EABHMACKey string `json:"eab_hmac_key"`
+	}
+	err = json.NewDecoder(resp.Body).Decode(&result)
+	if err != nil {
+		logrus.Fatalf("failed decoding ZeroSSL EAB API response: %v", err)
+	}
+	if result.Error.Code != 0 {
+		logrus.Fatalf("failed getting ZeroSSL EAB credentials: HTTP %d: %s (code %d)", resp.StatusCode, result.Error.Type, result.Error.Code)
+	}
+	if resp.StatusCode != http.StatusOK {
+		logrus.Fatalf("failed getting EAB credentials: HTTP %d", resp.StatusCode)
+	}
+
+	logrus.Infof("generated EAB credentials: key_id: %s", result.EABKID)
+
+	return &acme.EAB{
+		KeyID:  result.EABKID,
+		MACKey: result.EABHMACKey,
+	}
 }
