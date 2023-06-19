@@ -13,7 +13,7 @@ require (
 	github.com/libdns/godaddy v1.0.3
 	github.com/libdns/namedotcom v0.3.3
 	github.com/libdns/vultr v1.0.0
-	github.com/mholt/acmez v1.0.4
+	github.com/mholt/acmez v1.1.1
 	github.com/mritd/logrus v0.0.0-20221230124220-8f8f573eb651
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/cobra v1.6.1
