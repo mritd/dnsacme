@@ -55,7 +55,6 @@ func main() {
 }
 
 func init() {
-	rootCmd.PersistentFlags().Bool("test", false, "Use Let's Encrypt Staging CA to test")
 	rootCmd.PersistentFlags().StringSliceP("domain", "d", nil, "ACME cert domains")
 	rootCmd.PersistentFlags().StringP("email", "m", "caddy@zerossl.com", "ACME email")
 	rootCmd.PersistentFlags().String("storage-dir", dataDir(), "ACME cert status storage directory")
@@ -105,8 +104,6 @@ func initConfig(cmd *cobra.Command, _ []string) {
 	if listProviders {
 		return
 	}
-
-	conf.TestMode = viper.GetBool("test")
 
 	conf.Domains = viper.GetStringSlice("domain")
 	if conf.Domains == nil || len(conf.Domains) == 0 {

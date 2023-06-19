@@ -16,7 +16,7 @@ import (
 
 func Obtain(conf *Config) {
 
-	fmt.Println(LOGO)
+	fmt.Print(LOGO)
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
@@ -57,10 +57,8 @@ func Obtain(conf *Config) {
 
 	if conf.ZeroSSLCA {
 		issuer.CA = certmagic.ZeroSSLProductionCA
-		issuer.TestCA = certmagic.ZeroSSLProductionCA
 	} else {
 		issuer.CA = certmagic.LetsEncryptProductionCA
-		issuer.TestCA = certmagic.LetsEncryptStagingCA
 	}
 
 	magic.Issuers = []certmagic.Issuer{issuer}

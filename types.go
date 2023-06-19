@@ -3,7 +3,6 @@ package main
 import "github.com/caddyserver/certmagic"
 
 type Config struct {
-	TestMode      bool
 	Domains       []string
 	Email         string
 	ZeroSSLCA     bool
