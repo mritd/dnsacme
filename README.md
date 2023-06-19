@@ -9,7 +9,6 @@ Simple tool to manage ACME Cert(Ony Supported DNS-01).
 - Automatically renew certificates and execute hook scripts
 - Support ECC certificate (KeyType can be set)
 - Support multiple CA(Let's Encrypt/ZeroSSL)
-- Test mode for frequent testing of certificate requests (helpful when debugging)
 - Optional DNS providers at compile time (can be used to reduce file size)
 - No other dependencies except libc (support muslc)
 
@@ -23,10 +22,9 @@ Usage:
   dnsacme [flags]
 
 Examples:
-  dnsacme --test --domain='*.example.com' --dns=cloudflare --dns-config=CLOUDFLARE_API_TOKEN=xxxxxxxxxxxxxx
+  dnsacme --domain='*.example.com' --dns=cloudflare --dns-config=CLOUDFLARE_API_TOKEN=xxxxxxxxxxxxxx
 
 Flags:
-      --test                        Use Let's Encrypt Staging CA to test
   -d, --domain strings              ACME cert domains
   -m, --email string                ACME email (default "caddy@zerossl.com")
       --storage-dir string          ACME cert status storage directory (default "/Users/kovacs/Library/Application Support/dnsacme")
@@ -46,7 +44,7 @@ Flags:
 Currently dnsacme only supports 10 DNS providers (theoretically more, and some have not been added yet), 
 the providers supported by the `--dns` option can be viewed from here (`DNS_PROVIDER_*`): [consts.go](https://github.com/mritd/dnsacme/blob/main/consts.go)
 
-```go
+```sh
 DNS_PROVIDER_ALIDNS = "alidns"
 DNS_PROVIDER_AZURE = "azure"
 DNS_PROVIDER_CLOUDFLARE = "cloudflare"
@@ -66,7 +64,7 @@ dnsacme --dns aliydns --dns-config=ALIDNS_ACCKEYID=xxxxxx --dns-config=ALIDNS_AC
 
 The configuration variable Key of each DNS provider can also be found in [consts.go](https://github.com/mritd/dnsacme/blob/main/consts.go):
 
-```go
+```sh
 ENV_ALIDNS_ACCKEYID = "ALIDNS_ACCKEYID"
 ENV_ALIDNS_ACCKEYSECRET = "ALIDNS_ACCKEYSECRET"
 ENV_ALIDNS_REGIONID = "ALIDNS_REGIONID"
@@ -137,7 +135,6 @@ dnsacme uses environment variables prefixed with `ACME_`, which are defined as f
 
 | ENV KEY               | FLAG               | Example                                                        |
 |-----------------------|--------------------|----------------------------------------------------------------|
-| `ACME_TEST`           | `--test`           | `true`                                                         |
 | `ACME_DOMAIN`         | `--domain`         | `a.example.com b.example.com`                                  |
 | `ACME_STORAGE_DIR`    | `--storage-dir`    | `/tpm/acme`                                                    |
 | `ACME_KEY_TYPE`       | `--key-type`       | `rsa8192`                                                      |
