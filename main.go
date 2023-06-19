@@ -23,7 +23,7 @@ var conf = Config{DNSConfig: make(map[string]string)}
 var rootCmd = &cobra.Command{
 	Use:     "dnsacme",
 	Short:   "Simple tool to manage ACME Cert(Ony Supported DNS-01)",
-	Example: "  dnsacme --test --domain='*.example.com' --dns=cloudflare --dns-config=CLOUDFLARE_API_TOKEN=xxxxxxxxxxxxxx",
+	Example: "  dnsacme --domain='*.example.com' --dns=cloudflare --dns-config=CLOUDFLARE_API_TOKEN=xxxxxxxxxxxxxx",
 	Version: commit,
 	PreRun:  initConfig,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -70,8 +70,8 @@ func init() {
 	rootCmd.Flags().SortFlags = false
 	rootCmd.PersistentFlags().SortFlags = false
 
-	_ = viper.BindEnv("test", "ACME_TEST")
 	_ = viper.BindEnv("domain", "ACME_DOMAIN")
+	_ = viper.BindEnv("email", "ACME_EMAIL")
 	_ = viper.BindEnv("storage-dir", "ACME_STORAGE_DIR")
 	_ = viper.BindEnv("key-type", "ACME_KEY_TYPE")
 	_ = viper.BindEnv("dns", "ACME_DNS_PROVIDER")
