@@ -3,7 +3,7 @@ module github.com/mritd/dnsacme
 go 1.19
 
 require (
-	github.com/caddyserver/certmagic v0.18.2
+	github.com/caddyserver/certmagic v0.19.0
 	github.com/libdns/alidns v1.0.3
 	github.com/libdns/azure v0.3.0
 	github.com/libdns/cloudflare v0.1.0
@@ -52,6 +52,7 @@ require (
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/subosito/gotenv v1.4.2 // indirect
 	github.com/vultr/govultr/v3 v3.0.2 // indirect
+	github.com/zeebo/blake3 v0.2.3 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/crypto v0.10.0 // indirect
