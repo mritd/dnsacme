@@ -3,7 +3,7 @@ module github.com/mritd/dnsacme
 go 1.19
 
 require (
-	github.com/caddyserver/certmagic v0.19.1
+	github.com/caddyserver/certmagic v0.19.2
 	github.com/libdns/alidns v1.0.3
 	github.com/libdns/azure v0.3.0
 	github.com/libdns/cloudflare v0.1.0
