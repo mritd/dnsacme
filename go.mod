@@ -17,7 +17,7 @@ require (
 	github.com/mritd/logrus v0.0.0-20221230124220-8f8f573eb651
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/cobra v1.8.0
-	github.com/spf13/viper v1.18.1
+	github.com/spf13/viper v1.18.2
 	go.uber.org/zap v1.26.0
 )
 
