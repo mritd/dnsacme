@@ -9,7 +9,7 @@ require (
 	github.com/libdns/cloudflare v0.1.0
 	github.com/libdns/dnspod v0.0.3
 	github.com/libdns/duckdns v0.2.0
-	github.com/libdns/gandi v1.0.2
+	github.com/libdns/gandi v1.0.3
 	github.com/libdns/godaddy v1.0.3
 	github.com/libdns/namedotcom v0.3.3
 	github.com/libdns/vultr v1.0.0
