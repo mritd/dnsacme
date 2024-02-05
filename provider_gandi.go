@@ -11,7 +11,7 @@ import (
 
 func Gandi(conf *Config) (certmagic.ACMEDNSProvider, error) {
 	if val, ok := conf.DNSConfig[ENV_GANDI_API_TOKEN]; ok {
-		return &gandi.Provider{APIToken: val}, nil
+		return &gandi.Provider{BearerToken: val}, nil
 	}
 	return nil, errors.New("failed to get Gandi API Token")
 }
