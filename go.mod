@@ -1,9 +1,10 @@
 module github.com/mritd/dnsacme
 
 go 1.21.6
+toolchain go1.22.2
 
 require (
-	github.com/caddyserver/certmagic v0.20.0
+	github.com/caddyserver/certmagic v0.21.0
 	github.com/libdns/alidns v1.0.3
 	github.com/libdns/azure v0.4.0
 	github.com/libdns/cloudflare v0.1.1
@@ -27,6 +28,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/internal v1.5.2 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/dns/armdns v1.2.0 // indirect
 	github.com/AzureAD/microsoft-authentication-library-for-go v1.2.1 // indirect
+	github.com/caddyserver/zerossl v0.1.2 // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/golang-jwt/jwt/v5 v5.2.0 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
@@ -36,11 +38,12 @@ require (
 	github.com/hashicorp/go-retryablehttp v0.7.2 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
-	github.com/klauspost/cpuid/v2 v2.2.5 // indirect
+	github.com/klauspost/cpuid/v2 v2.2.7 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/libdns/libdns v0.2.2 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect
-	github.com/miekg/dns v1.1.55 // indirect
+	github.com/mholt/acmez/v2 v2.0.1 // indirect
+	github.com/miekg/dns v1.1.59 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/nrdcg/dnspod-go v0.4.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.1.0 // indirect
@@ -56,14 +59,15 @@ require (
 	github.com/vultr/govultr/v3 v3.0.2 // indirect
 	github.com/zeebo/blake3 v0.2.3 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/crypto v0.19.0 // indirect
+	golang.org/x/crypto v0.23.0 // indirect
 	golang.org/x/exp v0.0.0-20230905200255-921286631fa9 // indirect
-	golang.org/x/mod v0.12.0 // indirect
-	golang.org/x/net v0.21.0 // indirect
+	golang.org/x/mod v0.17.0 // indirect
+	golang.org/x/net v0.25.0 // indirect
 	golang.org/x/oauth2 v0.15.0 // indirect
-	golang.org/x/sys v0.17.0 // indirect
-	golang.org/x/text v0.14.0 // indirect
-	golang.org/x/tools v0.13.0 // indirect
+	golang.org/x/sync v0.7.0 // indirect
+	golang.org/x/sys v0.20.0 // indirect
+	golang.org/x/text v0.15.0 // indirect
+	golang.org/x/tools v0.21.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/protobuf v1.33.0 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
