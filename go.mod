@@ -4,7 +4,7 @@ go 1.21.6
 toolchain go1.22.2
 
 require (
-	github.com/caddyserver/certmagic v0.21.0
+	github.com/caddyserver/certmagic v0.21.2
 	github.com/libdns/alidns v1.0.3
 	github.com/libdns/azure v0.4.0
 	github.com/libdns/cloudflare v0.1.1
@@ -28,7 +28,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/internal v1.5.2 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/dns/armdns v1.2.0 // indirect
 	github.com/AzureAD/microsoft-authentication-library-for-go v1.2.1 // indirect
-	github.com/caddyserver/zerossl v0.1.2 // indirect
+	github.com/caddyserver/zerossl v0.1.3 // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/golang-jwt/jwt/v5 v5.2.0 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
