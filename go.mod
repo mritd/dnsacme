@@ -1,7 +1,6 @@
 module github.com/mritd/dnsacme
 
-go 1.21.6
-toolchain go1.22.2
+go 1.22.3
 
 require (
 	github.com/caddyserver/certmagic v0.21.2
@@ -14,7 +13,7 @@ require (
 	github.com/libdns/godaddy v1.0.3
 	github.com/libdns/namedotcom v0.3.3
 	github.com/libdns/vultr v1.0.0
-	github.com/mholt/acmez v1.2.0
+	github.com/mholt/acmez/v2 v2.0.1
 	github.com/mritd/logrus v0.0.0-20230606034929-eeeec5876e4d
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/cobra v1.8.0
@@ -42,7 +41,6 @@ require (
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/libdns/libdns v0.2.2 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect
-	github.com/mholt/acmez/v2 v2.0.1 // indirect
 	github.com/miekg/dns v1.1.59 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/nrdcg/dnspod-go v0.4.0 // indirect
@@ -69,7 +67,7 @@ require (
 	golang.org/x/text v0.15.0 // indirect
 	golang.org/x/tools v0.21.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
-	google.golang.org/protobuf v1.33.0 // indirect
+	google.golang.org/protobuf v1.31.0 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

@@ -9,7 +9,7 @@ import (
 	"github.com/libdns/godaddy"
 )
 
-func Godaddy(conf *Config) (certmagic.ACMEDNSProvider, error) {
+func Godaddy(conf *Config) (certmagic.DNSProvider, error) {
 	if val, ok := conf.DNSConfig[ENV_GODADDY_API_TOKEN]; ok {
 		return &godaddy.Provider{APIToken: val}, nil
 	}

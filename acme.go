@@ -12,9 +12,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/mholt/acmez/acme"
-
 	"github.com/caddyserver/certmagic"
+	"github.com/mholt/acmez/v2/acme"
 	"github.com/sirupsen/logrus"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -29,7 +28,7 @@ func Obtain(conf *Config) {
 
 	// Find a DNS Provider
 	var err error
-	var dnsProvider certmagic.ACMEDNSProvider
+	var dnsProvider certmagic.DNSProvider
 	if fn, ok := providerFn[strings.ToLower(conf.DNSProvider)]; ok {
 		if dnsProvider, err = fn(conf); err != nil {
 			logrus.Fatal(err)
@@ -57,8 +56,12 @@ func Obtain(conf *Config) {
 		DisableHTTPChallenge:    true,
 		DisableTLSALPNChallenge: true,
 		Email:                   conf.Email,
-		DNS01Solver:             &certmagic.DNS01Solver{DNSProvider: dnsProvider},
-		Logger:                  acmeLogger,
+		DNS01Solver: &certmagic.DNS01Solver{
+			DNSManager: certmagic.DNSManager{
+				DNSProvider: dnsProvider,
+			},
+		},
+		Logger: acmeLogger,
 	})
 
 	if conf.ZeroSSLCA {

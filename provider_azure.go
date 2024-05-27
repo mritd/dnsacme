@@ -7,7 +7,7 @@ import (
 	"github.com/libdns/azure"
 )
 
-func Azure(conf *Config) (certmagic.ACMEDNSProvider, error) {
+func Azure(conf *Config) (certmagic.DNSProvider, error) {
 	return &azure.Provider{
 		TenantId:          conf.DNSConfig[ENV_AZURE_TENANTID],
 		ClientId:          conf.DNSConfig[ENV_AZURE_CLIENTID],

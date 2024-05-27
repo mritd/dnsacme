@@ -9,7 +9,7 @@ import (
 	"github.com/libdns/alidns"
 )
 
-func AliDNS(conf *Config) (certmagic.ACMEDNSProvider, error) {
+func AliDNS(conf *Config) (certmagic.DNSProvider, error) {
 	accKeyID, ok := conf.DNSConfig[ENV_ALIDNS_ACCKEYID]
 	if !ok {
 		return nil, errors.New("failed to get AliDNS AccessKeyID")

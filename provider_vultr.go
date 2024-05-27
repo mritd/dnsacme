@@ -9,7 +9,7 @@ import (
 	"github.com/libdns/vultr"
 )
 
-func Vultr(conf *Config) (certmagic.ACMEDNSProvider, error) {
+func Vultr(conf *Config) (certmagic.DNSProvider, error) {
 	if val, ok := conf.DNSConfig[ENV_VULTR_API_TOKEN]; ok {
 		return &vultr.Provider{APIToken: val}, nil
 	}

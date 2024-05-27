@@ -9,7 +9,7 @@ import (
 	"github.com/libdns/dnspod"
 )
 
-func DNSPod(conf *Config) (certmagic.ACMEDNSProvider, error) {
+func DNSPod(conf *Config) (certmagic.DNSProvider, error) {
 	if val, ok := conf.DNSConfig[ENV_DNSPOD_API_TOKEN]; ok {
 		return &dnspod.Provider{APIToken: val}, nil
 	}

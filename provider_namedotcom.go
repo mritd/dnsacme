@@ -7,7 +7,7 @@ import (
 	"github.com/libdns/namedotcom"
 )
 
-func NameDotCom(conf *Config) (certmagic.ACMEDNSProvider, error) {
+func NameDotCom(conf *Config) (certmagic.DNSProvider, error) {
 	return &namedotcom.Provider{
 		Token:  conf.DNSConfig[ENV_NAMEDOTCOM_TOKEN],
 		User:   conf.DNSConfig[ENV_NAMEDOTCOM_USER],

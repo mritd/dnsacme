@@ -9,7 +9,7 @@ import (
 	"github.com/libdns/gandi"
 )
 
-func Gandi(conf *Config) (certmagic.ACMEDNSProvider, error) {
+func Gandi(conf *Config) (certmagic.DNSProvider, error) {
 	if val, ok := conf.DNSConfig[ENV_GANDI_API_TOKEN]; ok {
 		return &gandi.Provider{BearerToken: val}, nil
 	}

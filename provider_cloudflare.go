@@ -9,7 +9,7 @@ import (
 	"github.com/libdns/cloudflare"
 )
 
-func Cloudflare(conf *Config) (certmagic.ACMEDNSProvider, error) {
+func Cloudflare(conf *Config) (certmagic.DNSProvider, error) {
 	if val, ok := conf.DNSConfig[ENV_CLOUDFLARE_API_TOKEN]; ok {
 		return &cloudflare.Provider{APIToken: val}, nil
 	}
