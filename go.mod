@@ -16,7 +16,7 @@ require (
 	github.com/mholt/acmez/v2 v2.0.1
 	github.com/mritd/logrus v0.0.0-20230606034929-eeeec5876e4d
 	github.com/sirupsen/logrus v1.9.3
-	github.com/spf13/cobra v1.8.0
+	github.com/spf13/cobra v1.8.1
 	github.com/spf13/viper v1.19.0
 	go.uber.org/zap v1.27.0
 )
