@@ -13,7 +13,7 @@ func DNSPod(conf *Config) (certmagic.DNSProvider, error) {
 	if val, ok := conf.DNSConfig[ENV_DNSPOD_API_TOKEN]; ok {
 		return &dnspod.Provider{APIToken: val}, nil
 	}
-	return nil, errors.New("failed to get Vultr API Token")
+	return nil, errors.New("failed to get DNSPod API Token")
 }
 
 func init() {
