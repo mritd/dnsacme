@@ -65,7 +65,7 @@ func init() {
 	rootCmd.PersistentFlags().String("obtaining-hook", "", "CertMagic obtaining hook command")
 	rootCmd.PersistentFlags().String("obtained-hook", "", "CertMagic obtained hook command")
 	rootCmd.PersistentFlags().String("failed-hook", "", "CertMagic obtain failed hook command")
-	rootCmd.PersistentFlags().Bool("list-providers", false, "List supported DNS providers")
+	rootCmd.PersistentFlags().BoolVarP(&listProviders, "list-providers", "l", false, "List supported DNS providers")
 
 	rootCmd.Flags().SortFlags = false
 	rootCmd.PersistentFlags().SortFlags = false
