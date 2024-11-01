@@ -170,6 +170,18 @@ tasks:
       - task: linux-mips64
       - task: linux-mips64le
 
+  gofmt:
+    cmds:
+      - go install golang.org/x/tools/cmd/goimports@latest
+      - gofmt -s -w .
+      - goimports -w .
+
+  govulncheck:
+    desc: vulnerability detection
+    cmds:
+      - go install golang.org/x/vuln/cmd/govulncheck@v1.1.1
+      - govulncheck ./...
+
   default:
     cmds:
       - task: build-dnsacme

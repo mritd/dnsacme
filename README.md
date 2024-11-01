@@ -54,6 +54,7 @@ DNS_PROVIDER_GANDI = "gandi"
 DNS_PROVIDER_GODADDY = "godaddy"
 DNS_PROVIDER_NAMEDOTCOM = "namedotcom"
 DNS_PROVIDER_VULTR = "vultr"
+DNS_PROVIDER_HUAWEICLOUD = "huaweicloud"
 ```
 
 For each DNS provider has different configuration, the `--dns-config` option can be specified multiple times:
@@ -83,6 +84,9 @@ ENV_VULTR_API_TOKEN = "VULTR_API_TOKEN"
 ENV_DNSPOD_API_TOKEN = "DNSPOD_API_TOKEN"
 ENV_DUCKDNS_API_TOKEN = "DUCKDNS_API_TOKEN"
 ENV_DUCKDNS_OVERRIDE_DOMAIN = "DUCKDNS_OVERRIDE_DOMAIN"
+ENV_HUAWEICLOUD_ACCKEYID = "HUAWEICLOUD_ACCKEYID"
+ENV_HUAWEICLOUD_ACCKEYSECRET = "HUAWEICLOUD_ACCKEYSECRET"
+ENV_HUAWEICLOUD_REGIONID = "HUAWEICLOUD_REGIONID"
 ```
 
 **Currently, I don't use all DNS providers, so the configuration for some DNS providers is not verified in the code;**
