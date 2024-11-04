@@ -22,12 +22,12 @@ Usage:
   dnsacme [flags]
 
 Examples:
-  dnsacme --domain='*.example.com' --dns=cloudflare --dns-config=CLOUDFLARE_API_TOKEN=xxxxxxxxxxxxxx
+  dnsacme --domain='*.example.com' --email='your.example.com' --dns=cloudflare --dns-config=CLOUDFLARE_API_TOKEN=xxxxxxxxxxxxxx
 
 Flags:
   -d, --domain strings              ACME cert domains
-  -m, --email string                ACME email (default "caddy@zerossl.com")
-      --storage-dir string          ACME cert status storage directory (default "/Users/kovacs/Library/Application Support/dnsacme")
+  -m, --email string                ACME email
+      --storage-dir string          ACME cert status storage directory (default "/root/.config/certmagic")
   -t, --key-type string             ACME cert key type (default "P384")
   -p, --dns string                  ACME DNS provider
       --dns-config stringToString   ACME DNS provider config map (default [])
@@ -35,8 +35,11 @@ Flags:
       --obtaining-hook string       CertMagic obtaining hook command
       --obtained-hook string        CertMagic obtained hook command
       --failed-hook string          CertMagic obtain failed hook command
-      --list-providers              List supported DNS providers
+  -l, --list-providers              List supported DNS providers
+      --eab-keyid string            ACME Custom EABKeyID
+      --eab-mackey string           ACME Custom EABHMACKey
   -h, --help                        help for dnsacme
+  -v, --version                     version for dnsacme
 ```
 
 ### DNS Config

@@ -66,7 +66,14 @@ func Obtain(conf *Config) {
 
 	if conf.ZeroSSLCA {
 		issuer.CA = certmagic.ZeroSSLProductionCA
-		issuer.ExternalAccount = generateEABCredentials(conf.Email)
+		if len(conf.EABKeyID) > 0 && len(conf.EABHMACKey) > 0 {
+			issuer.ExternalAccount = &acme.EAB{
+				KeyID:  conf.EABKeyID,
+				MACKey: conf.EABHMACKey,
+			}
+		} else {
+			issuer.ExternalAccount = generateEABCredentials(conf.Email)
+		}
 	} else {
 		issuer.CA = certmagic.LetsEncryptProductionCA
 	}

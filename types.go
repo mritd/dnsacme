@@ -1,6 +1,8 @@
 package main
 
-import "github.com/caddyserver/certmagic"
+import (
+	"github.com/caddyserver/certmagic"
+)
 
 type Config struct {
 	Domains       []string
@@ -13,6 +15,11 @@ type Config struct {
 	ObtainingHook string
 	ObtainedHook  string
 	FailedHook    string
+
+	// 添加自定义EAB相关字段, ZeroSSLCA为true时有效, 将签发证书挂到zerossl指定账号下
+	// 具体参考https://app.zerossl.com/developer
+	EABKeyID   string // EAB Key Identifier
+	EABHMACKey string // EAB HMAC Key
 
 	keyType certmagic.KeyType
 }
