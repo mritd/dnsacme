@@ -23,7 +23,7 @@ var conf = Config{DNSConfig: make(map[string]string)}
 var rootCmd = &cobra.Command{
 	Use:     "dnsacme",
 	Short:   "Simple tool to manage ACME Cert(Ony Supported DNS-01)",
-	Example: "  dnsacme --domain='*.example.com' --dns=cloudflare --dns-config=CLOUDFLARE_API_TOKEN=xxxxxxxxxxxxxx",
+	Example: "  dnsacme --domain='*.example.com' --email='your.example.com' --dns=cloudflare --dns-config=CLOUDFLARE_API_TOKEN=xxxxxxxxxxxxxx",
 	Version: commit,
 	PreRun:  initConfig,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -56,7 +56,7 @@ func main() {
 
 func init() {
 	rootCmd.PersistentFlags().StringSliceP("domain", "d", nil, "ACME cert domains")
-	rootCmd.PersistentFlags().StringP("email", "m", "caddy@zerossl.com", "ACME email")
+	rootCmd.PersistentFlags().StringP("email", "m", "", "ACME email")
 	rootCmd.PersistentFlags().String("storage-dir", dataDir(), "ACME cert status storage directory")
 	rootCmd.PersistentFlags().StringP("key-type", "t", "P384", "ACME cert key type")
 	rootCmd.PersistentFlags().StringP("dns", "p", "", "ACME DNS provider")
@@ -66,6 +66,8 @@ func init() {
 	rootCmd.PersistentFlags().String("obtained-hook", "", "CertMagic obtained hook command")
 	rootCmd.PersistentFlags().String("failed-hook", "", "CertMagic obtain failed hook command")
 	rootCmd.PersistentFlags().BoolVarP(&listProviders, "list-providers", "l", false, "List supported DNS providers")
+	rootCmd.PersistentFlags().String("eab-keyid", "", "ACME Custom EABKeyID")
+	rootCmd.PersistentFlags().String("eab-mackey", "", "ACME Custom EABHMACKey")
 
 	rootCmd.Flags().SortFlags = false
 	rootCmd.PersistentFlags().SortFlags = false
@@ -80,6 +82,8 @@ func init() {
 	_ = viper.BindEnv("obtaining-hook", "ACME_OBTAINING_HOOK")
 	_ = viper.BindEnv("obtained-hook", "ACME_OBTAINED_HOOK")
 	_ = viper.BindEnv("failed-hook", "ACME_FAILED_HOOK")
+	_ = viper.BindEnv("eab-keyid", "ACME_EABKEYID")
+	_ = viper.BindEnv("eab-mackey", "ACME_EABHMACKEY")
 
 	_ = viper.BindPFlags(rootCmd.PersistentFlags())
 
@@ -144,6 +148,8 @@ func initConfig(cmd *cobra.Command, _ []string) {
 	}
 
 	conf.ZeroSSLCA = viper.GetBool("zerossl")
+	conf.EABKeyID = viper.GetString("eab-keyid")
+	conf.EABHMACKey = viper.GetString("eab-mackey")
 
 	conf.ObtainingHook = viper.GetString("obtaining-hook")
 	if conf.ObtainingHook != "" && len(strings.Fields(conf.ObtainingHook)) != 1 {
