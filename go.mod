@@ -13,7 +13,7 @@ require (
 	github.com/libdns/duckdns v0.2.0
 	github.com/libdns/gandi v1.0.3
 	github.com/libdns/godaddy v1.0.3
-	github.com/libdns/huaweicloud v0.2.2
+	github.com/libdns/huaweicloud v0.3.1
 	github.com/libdns/namedotcom v0.3.3
 	github.com/libdns/tencentcloud v1.1.0
 	github.com/libdns/vultr v1.0.0
@@ -32,7 +32,6 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/dns/armdns v1.2.0 // indirect
 	github.com/AzureAD/microsoft-authentication-library-for-go v1.2.2 // indirect
 	github.com/caddyserver/zerossl v0.1.3 // indirect
-	github.com/devhaozi/huaweicloud-sdk-go-v3 v0.0.0-20241018211007-bbebb6de5db7 // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/golang-jwt/jwt/v5 v5.2.1 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
