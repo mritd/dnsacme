@@ -15,7 +15,7 @@ require (
 	github.com/libdns/godaddy v1.0.3
 	github.com/libdns/huaweicloud v0.3.1
 	github.com/libdns/namedotcom v0.3.3
-	github.com/libdns/tencentcloud v1.1.0
+	github.com/libdns/tencentcloud v1.2.0
 	github.com/libdns/vultr v1.0.0
 	github.com/mholt/acmez/v2 v2.0.3
 	github.com/mritd/logrus v0.0.0-20230606034929-eeeec5876e4d
@@ -59,8 +59,7 @@ require (
 	github.com/spf13/cast v1.6.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
-	github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common v1.0.1034 // indirect
-	github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/dnspod v1.0.1034 // indirect
+	github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common v1.0.1051 // indirect
 	github.com/vultr/govultr/v3 v3.0.2 // indirect
 	github.com/zeebo/blake3 v0.2.4 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
