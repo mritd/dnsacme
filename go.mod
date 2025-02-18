@@ -8,7 +8,7 @@ require (
 	github.com/caddyserver/certmagic v0.21.7
 	github.com/libdns/alidns v1.0.3
 	github.com/libdns/azure v0.4.0
-	github.com/libdns/cloudflare v0.1.1
+	github.com/libdns/cloudflare v0.1.2
 	github.com/libdns/dnspod v0.0.3
 	github.com/libdns/duckdns v0.2.0
 	github.com/libdns/gandi v1.0.3
@@ -43,7 +43,7 @@ require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.9 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
-	github.com/libdns/libdns v0.2.2 // indirect
+	github.com/libdns/libdns v0.2.3 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect
 	github.com/mholt/acmez/v3 v3.0.1 // indirect
 	github.com/miekg/dns v1.1.62 // indirect
