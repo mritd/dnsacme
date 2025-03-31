@@ -1,7 +1,6 @@
 module github.com/mritd/dnsacme
 
 go 1.24.0
-
 require (
 	github.com/caddyserver/certmagic v0.22.0
 	github.com/libdns/alidns v1.0.3
@@ -11,7 +10,7 @@ require (
 	github.com/libdns/duckdns v0.2.0
 	github.com/libdns/gandi v1.0.3
 	github.com/libdns/godaddy v1.0.3
-	github.com/libdns/huaweicloud v0.3.1
+	github.com/libdns/huaweicloud v0.3.4
 	github.com/libdns/namedotcom v0.3.3
 	github.com/libdns/tencentcloud v1.2.0
 	github.com/libdns/vultr v1.0.0
