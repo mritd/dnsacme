@@ -1,9 +1,10 @@
 module github.com/mritd/dnsacme
 
 go 1.24.0
+
 require (
 	github.com/caddyserver/certmagic v0.22.2
-	github.com/libdns/alidns v1.0.3
+	github.com/libdns/alidns v1.0.4
 	github.com/libdns/azure v0.4.0
 	github.com/libdns/cloudflare v0.1.3
 	github.com/libdns/dnspod v0.0.3
