@@ -1,11 +1,12 @@
 module github.com/mritd/dnsacme
 
 go 1.24.0
+
 require (
 	github.com/caddyserver/certmagic v0.22.2
 	github.com/libdns/alidns v1.0.3
 	github.com/libdns/azure v0.4.0
-	github.com/libdns/cloudflare v0.1.3
+	github.com/libdns/cloudflare v0.2.0
 	github.com/libdns/dnspod v0.0.3
 	github.com/libdns/duckdns v0.2.0
 	github.com/libdns/gandi v1.0.4
@@ -39,7 +40,7 @@ require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.10 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
-	github.com/libdns/libdns v0.2.3 // indirect
+	github.com/libdns/libdns v1.0.0-beta.1 // indirect
 	github.com/miekg/dns v1.1.63 // indirect
 	github.com/nrdcg/dnspod-go v0.4.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.3 // indirect
