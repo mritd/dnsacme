@@ -8,7 +8,7 @@ require (
 	github.com/libdns/azure v0.4.0
 	github.com/libdns/cloudflare v0.2.0
 	github.com/libdns/dnspod v0.0.3
-	github.com/libdns/duckdns v0.2.0
+	github.com/libdns/duckdns v0.3.0
 	github.com/libdns/gandi v1.0.4
 	github.com/libdns/godaddy v1.0.3
 	github.com/libdns/huaweicloud v0.3.5
