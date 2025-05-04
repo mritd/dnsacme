@@ -6,7 +6,7 @@ require (
 	github.com/caddyserver/certmagic v0.23.0
 	github.com/libdns/alidns v1.0.3
 	github.com/libdns/azure v0.4.0
-	github.com/libdns/cloudflare v0.2.0
+	github.com/libdns/cloudflare v0.2.1
 	github.com/libdns/dnspod v0.0.3
 	github.com/libdns/duckdns v0.2.0
 	github.com/libdns/gandi v1.0.4
