@@ -15,7 +15,7 @@ require (
 	github.com/libdns/namedotcom v0.3.3
 	github.com/libdns/tencentcloud v1.3.1
 	github.com/libdns/vultr v1.0.0
-	github.com/mholt/acmez/v3 v3.1.1
+	github.com/mholt/acmez/v3 v3.1.2
 	github.com/mritd/logrus v0.0.0-20230606034929-eeeec5876e4d
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/cobra v1.9.1

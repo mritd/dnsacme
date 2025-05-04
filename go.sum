@@ -75,8 +75,8 @@ github.com/libdns/tencentcloud v1.3.1 h1:Wc+GvZIXfk/V9xWh/g1t7msCJ7H4uD7z5yirZXx
 github.com/libdns/tencentcloud v1.3.1/go.mod h1:Y2XP8r7D4Zdy0bEVJAXgG0TowGF63+8n3m/xjbSZipw=
 github.com/libdns/vultr v1.0.0 h1:W8B4+k2bm9ro3bZLSZV9hMOQI+uO6Svu+GmD+Olz7ZI=
 github.com/libdns/vultr v1.0.0/go.mod h1:8K1HJExcbeHS4YPkFHRZpqpXZzZ+DZAA0m0VikJgEqk=
-github.com/mholt/acmez/v3 v3.1.1 h1:Jh+9uKHkPxUJdxM16q5mOr+G2V0aqkuFtNA28ihCxhQ=
-github.com/mholt/acmez/v3 v3.1.1/go.mod h1:L1wOU06KKvq7tswuMDwKdcHeKpFFgkppZy/y0DFxagQ=
+github.com/mholt/acmez/v3 v3.1.2 h1:auob8J/0FhmdClQicvJvuDavgd5ezwLBfKuYmynhYzc=
+github.com/mholt/acmez/v3 v3.1.2/go.mod h1:L1wOU06KKvq7tswuMDwKdcHeKpFFgkppZy/y0DFxagQ=
 github.com/miekg/dns v1.1.40/go.mod h1:KNUDUusw/aVsxyTYZM1oqvCicbwhgbNgztCETuNZ7xM=
 github.com/miekg/dns v1.1.63 h1:8M5aAw6OMZfFXTT7K5V0Eu5YiiL8l7nUAkyN6C9YwaY=
 github.com/miekg/dns v1.1.63/go.mod h1:6NGHfjhpmr5lt3XPLuyfDJi5AXbNIPM9PY6H6sF1Nfs=
