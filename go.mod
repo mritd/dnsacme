@@ -5,7 +5,7 @@ go 1.24.0
 require (
 	github.com/caddyserver/certmagic v0.23.0
 	github.com/libdns/alidns v1.0.3
-	github.com/libdns/azure v0.4.0
+	github.com/libdns/azure v0.5.0
 	github.com/libdns/cloudflare v0.2.1
 	github.com/libdns/dnspod v0.0.3
 	github.com/libdns/duckdns v0.2.0
@@ -24,11 +24,11 @@ require (
 )
 
 require (
-	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.10.0 // indirect
-	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.5.1 // indirect
-	github.com/Azure/azure-sdk-for-go/sdk/internal v1.5.2 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.18.0 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.9.0 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/internal v1.11.1 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/dns/armdns v1.2.0 // indirect
-	github.com/AzureAD/microsoft-authentication-library-for-go v1.2.1 // indirect
+	github.com/AzureAD/microsoft-authentication-library-for-go v1.4.2 // indirect
 	github.com/caddyserver/zerossl v0.1.3 // indirect
 	github.com/fsnotify/fsnotify v1.8.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.2.1 // indirect
