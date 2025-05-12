@@ -75,12 +75,12 @@ github.com/libdns/huaweicloud v0.3.5 h1:TXv0QKkqgzEMSfqNUbAhoBj/2nrsiu1W6R0lKKH2
 github.com/libdns/huaweicloud v0.3.5/go.mod h1:fadizEwwxdO/+Owy5VVdnpm7rMRrbo/B9ofBAH5UN5M=
 github.com/libdns/libdns v0.2.0/go.mod h1:yQCXzk1lEZmmCPa857bnk4TsOiqYasqpyOEeSObbb40=
 github.com/libdns/libdns v0.2.1/go.mod h1:yQCXzk1lEZmmCPa857bnk4TsOiqYasqpyOEeSObbb40=
-github.com/libdns/libdns v1.0.0-beta.1 h1:KIf4wLfsrEpXpZ3vmc/poM8zCATXT2klbdPe6hyOBjQ=
-github.com/libdns/libdns v1.0.0-beta.1/go.mod h1:4Bj9+5CQiNMVGf87wjX4CY3HQJypUHRuLvlsfsZqLWQ=
+github.com/libdns/libdns v1.0.0 h1:IvYaz07JNz6jUQ4h/fv2R4sVnRnm77J/aOuC9B+TQTA=
+github.com/libdns/libdns v1.0.0/go.mod h1:4Bj9+5CQiNMVGf87wjX4CY3HQJypUHRuLvlsfsZqLWQ=
 github.com/libdns/namedotcom v0.3.3 h1:R10C7+IqQGVeC4opHHMiFNBxdNBg1bi65ZwqLESl+jE=
 github.com/libdns/namedotcom v0.3.3/go.mod h1:GbYzsAF2yRUpI0WgIK5fs5UX+kDVUPaYCFLpTnKQm0s=
-github.com/libdns/tencentcloud v1.3.1 h1:Wc+GvZIXfk/V9xWh/g1t7msCJ7H4uD7z5yirZXxUpzI=
-github.com/libdns/tencentcloud v1.3.1/go.mod h1:Y2XP8r7D4Zdy0bEVJAXgG0TowGF63+8n3m/xjbSZipw=
+github.com/libdns/tencentcloud v1.4.1 h1:eWEP/YxGG+pmSjQs0Fd92WLAChnhjPwE7GyInTFob8U=
+github.com/libdns/tencentcloud v1.4.1/go.mod h1:Be9gY3tDa12DuAPU79RV9NZIcjY6qg5s7zKPsP26yAM=
 github.com/libdns/vultr v1.0.0 h1:W8B4+k2bm9ro3bZLSZV9hMOQI+uO6Svu+GmD+Olz7ZI=
 github.com/libdns/vultr v1.0.0/go.mod h1:8K1HJExcbeHS4YPkFHRZpqpXZzZ+DZAA0m0VikJgEqk=
 github.com/mholt/acmez/v3 v3.1.2 h1:auob8J/0FhmdClQicvJvuDavgd5ezwLBfKuYmynhYzc=
