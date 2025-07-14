@@ -13,7 +13,7 @@ require (
 	github.com/libdns/godaddy v1.0.3
 	github.com/libdns/huaweicloud v0.3.5
 	github.com/libdns/namedotcom v0.3.3
-	github.com/libdns/tencentcloud v1.4.1
+	github.com/libdns/tencentcloud v1.4.2
 	github.com/libdns/vultr v1.0.0
 	github.com/mholt/acmez/v3 v3.1.2
 	github.com/mritd/logrus v0.0.0-20230606034929-eeeec5876e4d
