@@ -9,7 +9,7 @@ require (
 	github.com/libdns/cloudflare v0.2.1
 	github.com/libdns/dnspod v0.0.3
 	github.com/libdns/duckdns v0.2.0
-	github.com/libdns/gandi v1.0.4
+	github.com/libdns/gandi v1.1.0
 	github.com/libdns/godaddy v1.0.3
 	github.com/libdns/huaweicloud v0.3.5
 	github.com/libdns/namedotcom v0.3.3
@@ -40,7 +40,7 @@ require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.10 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
-	github.com/libdns/libdns v1.0.0 // indirect
+	github.com/libdns/libdns v1.1.0 // indirect
 	github.com/miekg/dns v1.1.63 // indirect
 	github.com/nrdcg/dnspod-go v0.4.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.3 // indirect
