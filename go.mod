@@ -11,7 +11,7 @@ require (
 	github.com/libdns/duckdns v0.2.0
 	github.com/libdns/gandi v1.1.0
 	github.com/libdns/godaddy v1.0.3
-	github.com/libdns/huaweicloud v0.3.5
+	github.com/libdns/huaweicloud v1.0.0
 	github.com/libdns/namedotcom v0.3.3
 	github.com/libdns/tencentcloud v1.4.2
 	github.com/libdns/vultr v1.0.0
