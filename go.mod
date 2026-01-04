@@ -1,6 +1,6 @@
 module github.com/mritd/dnsacme
 
-go 1.24.0
+go 1.25.5
 
 require (
 	github.com/caddyserver/certmagic v0.24.0
@@ -16,7 +16,7 @@ require (
 	github.com/libdns/tencentcloud v1.4.3
 	github.com/libdns/vultr v1.0.0
 	github.com/mholt/acmez/v3 v3.1.4
-	github.com/mritd/logrus v0.0.0-20230606034929-eeeec5876e4d
+	github.com/mritd/logrus v1.0.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
@@ -62,7 +62,7 @@ require (
 	golang.org/x/net v0.47.0 // indirect
 	golang.org/x/oauth2 v0.27.0 // indirect
 	golang.org/x/sync v0.18.0 // indirect
-	golang.org/x/sys v0.38.0 // indirect
+	golang.org/x/sys v0.39.0 // indirect
 	golang.org/x/text v0.31.0 // indirect
 	golang.org/x/tools v0.38.0 // indirect
 )
