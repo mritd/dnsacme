@@ -16,7 +16,7 @@ require (
 	github.com/libdns/tencentcloud v1.4.3
 	github.com/libdns/vultr v1.0.0
 	github.com/mholt/acmez/v3 v3.1.6
-	github.com/mritd/logrus v1.0.0
+	github.com/mritd/logrus v1.1.0
 	github.com/sirupsen/logrus v1.9.4
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
