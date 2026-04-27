@@ -4,7 +4,7 @@ go 1.25.5
 
 require (
 	github.com/caddyserver/certmagic v0.25.2
-	github.com/libdns/alidns v1.0.6
+	github.com/libdns/alidns v1.0.7
 	github.com/libdns/azure v0.5.0
 	github.com/libdns/cloudflare v0.2.2
 	github.com/libdns/dnspod v0.0.3

@@ -64,8 +64,8 @@ github.com/letsencrypt/challtestsrv v1.4.2 h1:0ON3ldMhZyWlfVNYYpFuWRTmZNnyfiL9Hh
 github.com/letsencrypt/challtestsrv v1.4.2/go.mod h1:GhqMqcSoeGpYd5zX5TgwA6er/1MbWzx/o7yuuVya+Wk=
 github.com/letsencrypt/pebble/v2 v2.10.0 h1:Wq6gYXlsY6ubqI3hhxsTzdyotvfdjFBxuwYqCLCnj/U=
 github.com/letsencrypt/pebble/v2 v2.10.0/go.mod h1:Sk8cmUIPcIdv2nINo+9PB4L+ZBhzY+F9A1a/h/xmWiQ=
-github.com/libdns/alidns v1.0.6 h1:/Ii428ty6WHFJmE24rZxq2taq++gh7rf9jhgLfp8PmM=
-github.com/libdns/alidns v1.0.6/go.mod h1:RECwyQ88e9VqQVtSrvX76o1ux3gQUKGzMgxICi+u7Ec=
+github.com/libdns/alidns v1.0.7 h1:0BhTUFlWIUyb5U7wujGqsyoeZkleUR/hMCtdZDS8Oc8=
+github.com/libdns/alidns v1.0.7/go.mod h1:RECwyQ88e9VqQVtSrvX76o1ux3gQUKGzMgxICi+u7Ec=
 github.com/libdns/azure v0.5.0 h1:zqIjuEinZsuIS9jlooJlc562Xwtlng5boruHoo7xbkc=
 github.com/libdns/azure v0.5.0/go.mod h1:9aCIh+jdIR/+6sTIsONLGGUjho9vjneRS59hSqIJo7k=
 github.com/libdns/cloudflare v0.2.2 h1:XWHv+C1dDcApqazlh08Q6pjytYLgR2a+Y3xrXFu0vsI=
