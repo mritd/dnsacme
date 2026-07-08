@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -109,22 +110,59 @@ func initConfig(cmd *cobra.Command, _ []string) {
 		return
 	}
 
-	conf.Domains = viper.GetStringSlice("domain")
-	if conf.Domains == nil || len(conf.Domains) == 0 {
+	var err error
+	conf, err = configFromViper()
+	if err != nil {
 		_ = cmd.Help()
-		logrus.Fatal("ACME Domain is empty")
+		logrus.Fatal(err)
+	}
+}
+
+func configFromViper() (Config, error) {
+	dnsConfig := viper.GetStringMapString("dns-config")
+	if len(dnsConfig) == 0 {
+		dnsConfig = parseDNSConfig(viper.GetString("dns-config"))
 	}
 
-	conf.Email = viper.GetString("email")
-	if conf.Email == "" {
-		_ = cmd.Help()
-		logrus.Fatal("ACME Email is empty")
+	return validateConfig(Config{
+		Domains:       viper.GetStringSlice("domain"),
+		Email:         viper.GetString("email"),
+		StorageDir:    viper.GetString("storage-dir"),
+		KeyType:       viper.GetString("key-type"),
+		DNSProvider:   viper.GetString("dns"),
+		DNSConfig:     dnsConfig,
+		ZeroSSLCA:     viper.GetBool("zerossl"),
+		EABKeyID:      viper.GetString("eab-keyid"),
+		EABHMACKey:    viper.GetString("eab-mackey"),
+		ObtainingHook: viper.GetString("obtaining-hook"),
+		ObtainedHook:  viper.GetString("obtained-hook"),
+		FailedHook:    viper.GetString("failed-hook"),
+	})
+}
+
+func parseDNSConfig(raw string) map[string]string {
+	result := make(map[string]string)
+	for _, item := range strings.Split(raw, ",") {
+		key, value, ok := strings.Cut(strings.TrimSpace(item), "=")
+		if !ok || key == "" {
+			continue
+		}
+		result[key] = value
+	}
+	return result
+}
+
+func validateConfig(c Config) (Config, error) {
+	if c.Domains == nil || len(c.Domains) == 0 {
+		return c, errors.New("ACME Domain is empty")
 	}
 
-	conf.StorageDir = viper.GetString("storage-dir")
+	if c.Email == "" {
+		return c, errors.New("ACME Email is empty")
+	}
 
-	conf.KeyType = strings.ToLower(viper.GetString("key-type"))
-	switch conf.KeyType {
+	c.KeyType = strings.ToLower(c.KeyType)
+	switch c.KeyType {
 	case "ed25519":
 	case "p256":
 	case "p384":
@@ -132,40 +170,28 @@ func initConfig(cmd *cobra.Command, _ []string) {
 	case "rsa4096":
 	case "rsa8192":
 	default:
-		logrus.Fatalf("Unsupported KeyType: %s", conf.keyType)
+		return c, fmt.Errorf("Unsupported KeyType: %s", c.KeyType)
 	}
 
-	conf.DNSProvider = viper.GetString("dns")
-	if conf.DNSProvider == "" {
-		_ = cmd.Help()
-		logrus.Fatal("ACME DNS Provider is empty")
+	if c.DNSProvider == "" {
+		return c, errors.New("ACME DNS Provider is empty")
 	}
 
-	conf.DNSConfig = viper.GetStringMapString("dns-config")
-	if conf.DNSConfig == nil || len(conf.DNSConfig) == 0 {
-		_ = cmd.Help()
-		logrus.Fatal("ACME DNS Provider config is empty")
+	if c.DNSConfig == nil || len(c.DNSConfig) == 0 {
+		return c, errors.New("ACME DNS Provider config is empty")
 	}
 
-	conf.ZeroSSLCA = viper.GetBool("zerossl")
-	conf.EABKeyID = viper.GetString("eab-keyid")
-	conf.EABHMACKey = viper.GetString("eab-mackey")
-
-	conf.ObtainingHook = viper.GetString("obtaining-hook")
-	if conf.ObtainingHook != "" && len(strings.Fields(conf.ObtainingHook)) != 1 {
-		_ = cmd.Help()
-		logrus.Fatalf("Obtaining Hook does not support parameter parsing: [%s]", conf.ObtainingHook)
+	if c.ObtainingHook != "" && len(strings.Fields(c.ObtainingHook)) != 1 {
+		return c, fmt.Errorf("Obtaining Hook does not support parameter parsing: [%s]", c.ObtainingHook)
 	}
 
-	conf.ObtainedHook = viper.GetString("obtained-hook")
-	if conf.ObtainedHook != "" && len(strings.Fields(conf.ObtainedHook)) != 1 {
-		_ = cmd.Help()
-		logrus.Fatalf("Obtained Hook does not support parameter parsing: [%s]", conf.ObtainedHook)
+	if c.ObtainedHook != "" && len(strings.Fields(c.ObtainedHook)) != 1 {
+		return c, fmt.Errorf("Obtained Hook does not support parameter parsing: [%s]", c.ObtainedHook)
 	}
 
-	conf.FailedHook = viper.GetString("failed-hook")
-	if conf.FailedHook != "" && len(strings.Fields(conf.FailedHook)) != 1 {
-		_ = cmd.Help()
-		logrus.Fatalf("Failed Hook does not support parameter parsing: [%s]", conf.FailedHook)
+	if c.FailedHook != "" && len(strings.Fields(c.FailedHook)) != 1 {
+		return c, fmt.Errorf("Failed Hook does not support parameter parsing: [%s]", c.FailedHook)
 	}
+
+	return c, nil
 }

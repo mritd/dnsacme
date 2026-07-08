@@ -44,26 +44,24 @@ Flags:
 
 ### DNS Config
 
-Currently dnsacme only supports 10 DNS providers (theoretically more, and some have not been added yet), 
+Currently dnsacme supports 8 DNS providers (theoretically more, and some have not been added yet),
 the providers supported by the `--dns` option can be viewed from here (`DNS_PROVIDER_*`): [consts.go](https://github.com/mritd/dnsacme/blob/main/consts.go)
 
 ```sh
 DNS_PROVIDER_ALIDNS = "alidns"
 DNS_PROVIDER_AZURE = "azure"
 DNS_PROVIDER_CLOUDFLARE = "cloudflare"
-DNS_PROVIDER_DNSPOD = "dnspod"
 DNS_PROVIDER_DUCKDNS = "duckdns"
 DNS_PROVIDER_GANDI = "gandi"
 DNS_PROVIDER_GODADDY = "godaddy"
-DNS_PROVIDER_NAMEDOTCOM = "namedotcom"
-DNS_PROVIDER_VULTR = "vultr"
 DNS_PROVIDER_HUAWEICLOUD = "huaweicloud"
+DNS_PROVIDER_TENCENTCLOUD = "tencentcloud"
 ```
 
 For each DNS provider has different configuration, the `--dns-config` option can be specified multiple times:
 
 ```sh
-dnsacme --dns aliydns --dns-config=ALIDNS_ACCKEYID=xxxxxx --dns-config=ALIDNS_ACCKEYSECRET=xxxxxx ...
+dnsacme --dns alidns --dns-config=ALIDNS_ACCKEYID=xxxxxx --dns-config=ALIDNS_ACCKEYSECRET=xxxxxx ...
 ```
 
 The configuration variable Key of each DNS provider can also be found in [consts.go](https://github.com/mritd/dnsacme/blob/main/consts.go):
@@ -79,12 +77,7 @@ ENV_AZURE_SUBSCRIPTIONID = "AZURE_SUBSCRIPTIONID"
 ENV_AZURE_RESOURCEGROUPNAME = "AZURE_RESOURCEGROUPNAME"
 ENV_GANDI_API_TOKEN = "GANDI_API_TOKEN"
 ENV_CLOUDFLARE_API_TOKEN = "CLOUDFLARE_API_TOKEN"
-ENV_NAMEDOTCOM_TOKEN = "NAMEDOTCOM_TOKEN"
-ENV_NAMEDOTCOM_USER = "NAMEDOTCOM_USER"
-ENV_NAMEDOTCOM_SERVER = "NAMEDOTCOM_SERVER"
 ENV_GODADDY_API_TOKEN = "GODADDY_API_TOKEN"
-ENV_VULTR_API_TOKEN = "VULTR_API_TOKEN"
-ENV_DNSPOD_API_TOKEN = "DNSPOD_API_TOKEN"
 ENV_DUCKDNS_API_TOKEN = "DUCKDNS_API_TOKEN"
 ENV_DUCKDNS_OVERRIDE_DOMAIN = "DUCKDNS_OVERRIDE_DOMAIN"
 ENV_HUAWEICLOUD_ACCKEYID = "HUAWEICLOUD_ACCKEYID"
@@ -153,7 +146,6 @@ dnsacme uses environment variables prefixed with `ACME_`, which are defined as f
 | `ACME_OBTAINING_HOOK` | `--obtaining-hook` | `/opt/scripts/acme-obtaining-hook.sh`                          |
 | `ACME_OBTAINED_HOOK`  | `--obtained-hook`  | `/opt/scripts/acme-obtained-hook.sh`                           |
 | `ACME_FAILED_HOOK`    | `--failed-hook`    | `/opt/scripts/acme-failed-hook.sh`                             |
-
 
 
 

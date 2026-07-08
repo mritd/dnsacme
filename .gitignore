@@ -274,3 +274,8 @@ $RECYCLE.BIN/
 
 build/
 dnsacme
+
+### Go test artifacts ###
+coverage.out
+*.coverprofile
+*.test

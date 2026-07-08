@@ -20,9 +20,11 @@ func AliDNS(conf *Config) (certmagic.DNSProvider, error) {
 	}
 
 	return &alidns.Provider{
-		AccKeyID:     accKeyID,
-		AccKeySecret: accKeySecret,
-		RegionID:     conf.DNSConfig[ENV_ALIDNS_REGIONID],
+		CredentialInfo: alidns.CredentialInfo{
+			AccessKeyID:     accKeyID,
+			AccessKeySecret: accKeySecret,
+			RegionID:        conf.DNSConfig[ENV_ALIDNS_REGIONID],
+		},
 	}, nil
 }
 
