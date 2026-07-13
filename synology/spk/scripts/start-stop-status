@@ -34,6 +34,13 @@ daemon_pid() {
 }
 
 start_daemon() {
+  # DSM normally runs this lifecycle script as the package account declared in
+  # conf/privilege. If a root shell invokes it directly, drop to that same account
+  # before launching the daemon; otherwise 0600 certificate files would become
+  # root-owned and unreadable after the next normal Package Center start.
+  if [ "$(id -u)" -eq 0 ]; then
+    exec su -s /bin/sh dnsacme -c "/var/packages/dnsacme/scripts/start-stop-status start"
+  fi
   mkdir -p "$VAR" "$ETC"
   # DSM notification templates are embedded in the binary and published once by
   # the root `synology publish-notifications` command a user runs over SSH; the

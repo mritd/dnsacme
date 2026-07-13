@@ -1,11 +1,19 @@
 #!/bin/sh
-# Best-effort removal of the published notification catalog on a real uninstall
-# only (not an upgrade, where SYNOPKG_PKG_STATUS=UPGRADE and the catalog is still
-# valid). DSM runs this script as the unprivileged package user in a sandbox, so
-# it usually cannot remove the root-owned catalog; a user who wants it gone first
-# runs `... synology publish-notifications --disable` as root. The rm stays as a
-# harmless best-effort for the case where privileges do allow it.
-if [ "$SYNOPKG_PKG_STATUS" != "UPGRADE" ]; then
-  rm -rf /var/cache/texts/DNSACME
+
+# DSM intentionally preserves the package FHS var, etc, and home directories
+# after uninstall. Remove their contents on a real uninstall so certificates,
+# ACME account keys, configuration, and logs are not left behind. During an
+# upgrade DSM invokes this script with UPGRADE, and all persistent data must stay.
+if [ "$SYNOPKG_PKG_STATUS" = "UNINSTALL" ]; then
+  for dir in \
+    /var/packages/dnsacme/var \
+    /var/packages/dnsacme/etc \
+    /var/packages/dnsacme/home
+  do
+    [ -d "$dir" ] || continue
+    # Include hidden entries without relying on non-POSIX find extensions.
+    rm -rf "$dir"/* "$dir"/.[!.]* "$dir"/..?*
+  done
 fi
+
 exit 0

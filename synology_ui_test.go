@@ -66,6 +66,43 @@ func TestSynologyPackageMaintainerLinksToRepository(t *testing.T) {
 	}
 }
 
+func TestSynologyLifecycleDropsRootBeforeStart(t *testing.T) {
+	data, err := os.ReadFile("synology/spk/scripts/start-stop-status")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := string(data)
+	if !strings.Contains(script, `if [ "$(id -u)" -eq 0 ]; then`) {
+		t.Fatal("lifecycle script must detect a direct root start")
+	}
+	if !strings.Contains(script, `exec su -s /bin/sh dnsacme -c "/var/packages/dnsacme/scripts/start-stop-status start"`) {
+		t.Fatal("lifecycle script must drop root before launching the daemon")
+	}
+}
+
+func TestSynologyUninstallRemovesPersistentDataOnlyOnUninstall(t *testing.T) {
+	data, err := os.ReadFile("synology/spk/scripts/postuninst")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := string(data)
+	if !strings.Contains(script, `if [ "$SYNOPKG_PKG_STATUS" = "UNINSTALL" ]; then`) {
+		t.Fatal("postuninst must restrict destructive cleanup to a real uninstall")
+	}
+	for _, path := range []string{
+		"/var/packages/dnsacme/var",
+		"/var/packages/dnsacme/etc",
+		"/var/packages/dnsacme/home",
+	} {
+		if !strings.Contains(script, path) {
+			t.Fatalf("postuninst does not clean %s", path)
+		}
+	}
+	if strings.Contains(script, "/var/cache/texts/DNSACME") {
+		t.Fatal("normal uninstall must leave the DSM notification catalog untouched")
+	}
+}
+
 func TestSynologyUIButtonTextUsesDSMNativeMetrics(t *testing.T) {
 	sourceBytes, err := os.ReadFile("synology/spk/ui/DNSACME.js")
 	if err != nil {
