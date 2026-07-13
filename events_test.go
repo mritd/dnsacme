@@ -29,7 +29,7 @@ func TestHookForEvent(t *testing.T) {
 }
 
 func TestCertStorageName(t *testing.T) {
-	if got := certStorageName("*.example.com"); got != "wildcard_example.com" {
+	if got := certStorageName("*.example.com"); got != "wildcard_.example.com" {
 		t.Fatalf("certStorageName wildcard = %q", got)
 	}
 	if got := certStorageName("example.com"); got != "example.com" {
@@ -39,12 +39,12 @@ func TestCertStorageName(t *testing.T) {
 
 func TestHookEnv(t *testing.T) {
 	dir := t.TempDir()
-	certDir := filepath.Join(dir, "certificates", "acme", "wildcard_example.com")
+	certDir := filepath.Join(dir, "certificates", "acme", "wildcard_.example.com")
 	if err := os.MkdirAll(certDir, 0o755); err != nil {
 		t.Fatalf("mkdir cert dir: %v", err)
 	}
-	keyPath := filepath.Join(certDir, "wildcard_example.com.key")
-	certPath := filepath.Join(certDir, "wildcard_example.com.crt")
+	keyPath := filepath.Join(certDir, "wildcard_.example.com.key")
+	certPath := filepath.Join(certDir, "wildcard_.example.com.crt")
 	if err := os.WriteFile(keyPath, []byte("key"), 0o600); err != nil {
 		t.Fatalf("write key: %v", err)
 	}
@@ -68,6 +68,48 @@ func TestHookEnv(t *testing.T) {
 	for _, item := range env {
 		if strings.HasPrefix(item, "ACME_IDENTIFIER=") {
 			t.Fatalf("unexpected ACME_IDENTIFIER in env: %v", env)
+		}
+	}
+}
+
+// A stale sibling identifier left in storage (e.g. a prior "sub.example.com" or
+// "*.example.com" apply before the domain was changed to the apex) must never be
+// resolved for "example.com": its file name ends with "example.com.crt" and sorts
+// later, so a suffix match would import the wrong host's certificate into DSM.
+func TestHookEnvIgnoresSiblingIdentifierWithSharedSuffix(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name string) (string, string) {
+		certDir := filepath.Join(dir, "certificates", "acme", name)
+		if err := os.MkdirAll(certDir, 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", name, err)
+		}
+		keyPath := filepath.Join(certDir, name+".key")
+		certPath := filepath.Join(certDir, name+".crt")
+		if err := os.WriteFile(keyPath, []byte("key"), 0o600); err != nil {
+			t.Fatalf("write key %s: %v", name, err)
+		}
+		if err := os.WriteFile(certPath, []byte("cert"), 0o600); err != nil {
+			t.Fatalf("write cert %s: %v", name, err)
+		}
+		return keyPath, certPath
+	}
+	apexKey, apexCert := write("example.com")
+	// Siblings whose names end with the target name; both sort after "example.com".
+	write("sub.example.com")
+	write("wildcard_.example.com")
+
+	env, err := hookEnv(context.Background(), &Config{StorageDir: dir}, map[string]any{"identifier": "example.com"})
+	if err != nil {
+		t.Fatalf("hookEnv returned error: %v", err)
+	}
+	assertEnvContains(t, env, "ACME_KEY_PATH="+apexKey)
+	assertEnvContains(t, env, "ACME_CERT_PATH="+apexCert)
+	for _, item := range env {
+		if strings.HasPrefix(item, "ACME_KEY_PATH=") && item != "ACME_KEY_PATH="+apexKey {
+			t.Fatalf("resolved a sibling key instead of the apex: %q", item)
+		}
+		if strings.HasPrefix(item, "ACME_CERT_PATH=") && item != "ACME_CERT_PATH="+apexCert {
+			t.Fatalf("resolved a sibling cert instead of the apex: %q", item)
 		}
 	}
 }
@@ -115,6 +157,28 @@ func TestOnEventRunsHook(t *testing.T) {
 
 	if err := OnEvent(&Config{})(context.Background(), "unknown", nil); err != nil {
 		t.Fatalf("unknown event should be ignored: %v", err)
+	}
+}
+
+func TestOnEventRunsCustomEventHook(t *testing.T) {
+	calls := 0
+	err := OnEvent(&Config{
+		EventHook: func(ctx context.Context, event string, data map[string]any) error {
+			calls++
+			if event != "cert_obtained" {
+				t.Fatalf("unexpected event: %s", event)
+			}
+			if data["identifier"] != "example.com" {
+				t.Fatalf("unexpected data: %+v", data)
+			}
+			return nil
+		},
+	})(context.Background(), "cert_obtained", map[string]any{"identifier": "example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 {
+		t.Fatalf("expected custom hook call, got %d", calls)
 	}
 }
 

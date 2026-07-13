@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/spf13/viper"
 )
 
 func TestDataDirUsesXDGConfigHome(t *testing.T) {
@@ -72,6 +74,8 @@ func TestValidateConfigErrors(t *testing.T) {
 		{name: "obtaining hook args", mutate: func(c *Config) { c.ObtainingHook = "/bin/echo hello" }, want: "Obtaining Hook"},
 		{name: "obtained hook args", mutate: func(c *Config) { c.ObtainedHook = "/bin/echo hello" }, want: "Obtained Hook"},
 		{name: "failed hook args", mutate: func(c *Config) { c.FailedHook = "/bin/echo hello" }, want: "Failed Hook"},
+		{name: "renewal window ratio above one", mutate: func(c *Config) { c.RenewalWindowRatio = 1.5 }, want: "Renewal Window Ratio"},
+		{name: "renewal window ratio negative", mutate: func(c *Config) { c.RenewalWindowRatio = -0.2 }, want: "Renewal Window Ratio"},
 	}
 
 	for _, tt := range tests {
@@ -101,6 +105,7 @@ func TestProvidersSort(t *testing.T) {
 }
 
 func TestConfigFromViperReadsBoundValues(t *testing.T) {
+	resetViperForTest(t)
 	t.Setenv("ACME_DOMAIN", "example.com")
 	t.Setenv("ACME_EMAIL", "ops@example.com")
 	t.Setenv("ACME_STORAGE_DIR", t.TempDir())
@@ -124,8 +129,73 @@ func TestConfigFromViperReadsBoundValues(t *testing.T) {
 	}
 }
 
+func TestConfigFromFile(t *testing.T) {
+	resetViperForTest(t)
+	path := filepath.Join(t.TempDir(), "dnsacme.yaml")
+	storageDir := t.TempDir()
+	data := strings.Join([]string{
+		"domain:",
+		"  - example.com",
+		"  - '*.example.com'",
+		"email: ops@example.com",
+		"storage-dir: " + storageDir,
+		"key-type: P256",
+		"dns: cloudflare",
+		"dns-config:",
+		"  CLOUDFLARE_API_TOKEN: token",
+		"zerossl: false",
+		"obtained-hook: /bin/true",
+	}, "\n")
+	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	configFile = path
+	if err := readConfigFile(); err != nil {
+		t.Fatalf("readConfigFile returned error: %v", err)
+	}
+	cfg, err := configFromViper()
+	if err != nil {
+		t.Fatalf("configFromViper returned error: %v", err)
+	}
+	if got := strings.Join(cfg.Domains, ","); got != "example.com,*.example.com" {
+		t.Fatalf("unexpected domains: %s", got)
+	}
+	if cfg.Email != "ops@example.com" || cfg.StorageDir != storageDir || cfg.KeyType != "p256" {
+		t.Fatalf("unexpected config from file: %#v", cfg)
+	}
+	if cfg.ZeroSSLCA {
+		t.Fatal("expected zerossl false from config file")
+	}
+	if cfg.DNSConfig[ENV_CLOUDFLARE_API_TOKEN] != "token" {
+		t.Fatalf("unexpected dns config: %#v", cfg.DNSConfig)
+	}
+}
+
+func TestReadConfigFileFromEnvAndErrors(t *testing.T) {
+	resetViperForTest(t)
+	path := filepath.Join(t.TempDir(), "missing.yaml")
+	t.Setenv("ACME_CONFIG", path)
+	if err := readConfigFile(); err == nil || !strings.Contains(err.Error(), "failed to read config file") {
+		t.Fatalf("expected config file error, got %v", err)
+	}
+}
+
 func TestMainFunctionExists(t *testing.T) {
 	if os.Args == nil {
 		t.Fatal("os.Args should be initialized")
 	}
+}
+
+func resetViperForTest(t *testing.T) {
+	t.Helper()
+	oldConfigFile := configFile
+	configFile = ""
+	viper.Reset()
+	bindConfigSources()
+	t.Cleanup(func() {
+		configFile = oldConfigFile
+		viper.Reset()
+		bindConfigSources()
+	})
 }

@@ -1,0 +1,86 @@
+#!/bin/sh
+
+# Restrict the PID and redirected log even if Package Center starts this script
+# with a broader inherited umask.
+umask 077
+
+PACKAGE="dnsacme"
+TARGET="/var/packages/${PACKAGE}/target"
+VAR="/var/packages/${PACKAGE}/var"
+ETC="/var/packages/${PACKAGE}/etc"
+PIDFILE="${VAR}/dnsacme.pid"
+CONFIG="${ETC}/config.yaml"
+LOG="${VAR}/dnsacme.log"
+
+daemon_pid() {
+  [ -f "$PIDFILE" ] || return 1
+  pid="$(cat "$PIDFILE" 2>/dev/null)"
+  case "$pid" in
+    ''|*[!0-9]*) return 1 ;;
+  esac
+  kill -0 "$pid" 2>/dev/null || return 1
+
+  # A stale PID can be reused by an unrelated process. Verify both the executable
+  # and command line before treating it as our daemon or sending it a signal.
+  exe="$(readlink "/proc/$pid/exe" 2>/dev/null)" || return 1
+  target_exe="$(readlink -f "$TARGET/bin/dnsacme" 2>/dev/null)" || return 1
+  [ "$exe" = "$target_exe" ] || return 1
+  cmdline="$(tr '\000' ' ' < "/proc/$pid/cmdline" 2>/dev/null)" || return 1
+  case "$cmdline" in
+    *" synology daemon "*) ;;
+    *) return 1 ;;
+  esac
+  printf '%s\n' "$pid"
+}
+
+start_daemon() {
+  mkdir -p "$VAR" "$ETC"
+  # DSM notification templates are embedded in the binary and published once by
+  # the root `synology publish-notifications` command a user runs over SSH; the
+  # daemon and this script always run as the unprivileged package user. This
+  # script could not publish them anyway: DSM runs lifecycle scripts in a sandbox
+  # whose writes to /var/cache do not persist.
+  # Package Center may call start repeatedly; keep the existing live process
+  # instead of launching competing renewal managers for the same storage.
+  if daemon_pid >/dev/null; then
+		exit 0
+	fi
+	rm -f "$PIDFILE"
+  # Pass the same explicit path used by CGI requests so daemon and UI always
+  # observe one persisted configuration file.
+  DNSACME_CONFIG="$CONFIG" nohup "$TARGET/bin/dnsacme" synology daemon --config "$CONFIG" >>"$LOG" 2>&1 &
+  echo "$!" > "$PIDFILE"
+}
+
+stop_daemon() {
+	pid="$(daemon_pid 2>/dev/null)" || pid=""
+	if [ -n "$pid" ]; then
+		kill "$pid" 2>/dev/null || true
+	fi
+	# Invalid and stale PID files are removed without signaling their process.
+	rm -f "$PIDFILE"
+}
+
+case "$1" in
+  start)
+    start_daemon
+    ;;
+  stop)
+    stop_daemon
+    ;;
+  status)
+    # Package status reports process liveness only. A live daemon can still be
+    # waiting for readable, valid, and successfully applied configuration.
+    if daemon_pid >/dev/null; then
+      exit 0
+    fi
+    exit 1
+    ;;
+  log)
+    echo "$LOG"
+    ;;
+  *)
+    echo "Usage: $0 {start|stop|status|log}"
+    exit 1
+    ;;
+esac

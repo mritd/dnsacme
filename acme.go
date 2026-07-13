@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -31,6 +32,8 @@ var (
 	}
 )
 
+// Obtain performs the initial certificate management pass, emits configured
+// hooks, and keeps CertMagic's maintenance cache alive until shutdown.
 func Obtain(conf *Config) {
 
 	fmt.Print(LOGO)
@@ -38,26 +41,56 @@ func Obtain(conf *Config) {
 	ctx, cancel := signalNotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
+	stop, err := startACMEManagement(ctx, conf, true)
+	if err != nil {
+		logrus.Fatalf("Failed to Obtain Cert: %s", err)
+	}
+	defer stop()
+
+	logrus.Info("DNS ACME Running...")
+
+	waitForShutdown(ctx)
+	logrus.Info("DNS ACME Exit.")
+}
+
+// ObtainOnce builds an isolated CertMagic runtime and starts management for the
+// configured identifiers. emitHooks controls only the legacy synthetic
+// cert_obtained replay after startup; native CertMagic events always use OnEvent.
+// The maintenance cache is stopped before this one-shot helper returns.
+func ObtainOnce(ctx context.Context, conf *Config, emitHooks bool) error {
+	stop, err := startACMEManagement(ctx, conf, emitHooks)
+	if err != nil {
+		return err
+	}
+	stop()
+	return nil
+}
+
+// startACMEManagement returns an explicit stop function because CertMagic caches
+// own a maintenance goroutine. Long-lived callers must stop the old cache before
+// replacing a configuration snapshot.
+func startACMEManagement(ctx context.Context, conf *Config, emitHooks bool) (func(), error) {
 	dnsProvider, err := dnsProviderForConfig(conf)
 	if err != nil {
-		logrus.Fatal(err)
+		return nil, err
 	}
 
 	acmeLogger := newACMELogger()
 
 	magic := newCertMagicConfig(conf, acmeLogger)
+	magic, cache := newManagedConfigWithCache(magic, acmeLogger)
 	magic.Issuers = []certmagic.Issuer{newACMEIssuer(conf, magic, dnsProvider, acmeLogger)}
-	magic = newManagedConfig(magic, acmeLogger)
 
 	if err = manageCertificates(ctx, magic, conf.Domains); err != nil {
-		logrus.Fatalf("Failed to Obtain Cert: %s", err)
+		cache.Stop()
+		return nil, err
 	}
 
-	emitCertObtainedEvents(ctx, conf)
-	logrus.Info("DNS ACME Running...")
+	if emitHooks {
+		emitCertObtainedEvents(ctx, conf)
+	}
 
-	waitForShutdown(ctx)
-	logrus.Info("DNS ACME Exit.")
+	return cache.Stop, nil
 }
 
 func dnsProviderForConfig(conf *Config) (certmagic.DNSProvider, error) {
@@ -68,17 +101,96 @@ func dnsProviderForConfig(conf *Config) (certmagic.DNSProvider, error) {
 }
 
 func newACMELogger() *zap.Logger {
-	return zap.New(zapcore.NewCore(
-		zapcore.NewConsoleEncoder(zap.NewProductionEncoderConfig()),
-		os.Stdout,
-		zap.InfoLevel,
-	))
+	return zap.New(newLogrusZapCore())
+}
+
+// logrusZapCore forwards CertMagic's zap entries and structured fields verbatim
+// into the project logger. Callers must avoid putting credentials in zap fields;
+// the core unifies format, destination, and timestamp style but does not redact.
+type logrusZapCore struct {
+	fields []zapcore.Field
+}
+
+func newLogrusZapCore() zapcore.Core {
+	return &logrusZapCore{}
+}
+
+func (c *logrusZapCore) Enabled(level zapcore.Level) bool {
+	return level >= zapcore.InfoLevel
+}
+
+func (c *logrusZapCore) With(fields []zapcore.Field) zapcore.Core {
+	combined := make([]zapcore.Field, 0, len(c.fields)+len(fields))
+	combined = append(combined, c.fields...)
+	combined = append(combined, fields...)
+	return &logrusZapCore{fields: combined}
+}
+
+func (c *logrusZapCore) Check(entry zapcore.Entry, ce *zapcore.CheckedEntry) *zapcore.CheckedEntry {
+	if c.Enabled(entry.Level) {
+		return ce.AddCore(entry, c)
+	}
+	return ce
+}
+
+func (c *logrusZapCore) Write(entry zapcore.Entry, fields []zapcore.Field) error {
+	enc := zapcore.NewMapObjectEncoder()
+	for _, field := range c.fields {
+		field.AddTo(enc)
+	}
+	for _, field := range fields {
+		field.AddTo(enc)
+	}
+	data := make(logrus.Fields, len(enc.Fields)+1)
+	for k, v := range enc.Fields {
+		data[k] = v
+	}
+	if entry.LoggerName != "" {
+		data["logger"] = entry.LoggerName
+	}
+	logEntry := logrus.WithFields(data)
+	switch {
+	case entry.Level >= zapcore.ErrorLevel:
+		// Map every error-or-worse level (including DPanic/Panic/Fatal) to a
+		// plain error so a forwarded certmagic log can never kill the process.
+		logEntry.Error(entry.Message)
+	case entry.Level == zapcore.WarnLevel:
+		logEntry.Warn(entry.Message)
+	default:
+		logEntry.Info(entry.Message)
+	}
+	return nil
+}
+
+func (c *logrusZapCore) Sync() error {
+	return nil
+}
+
+// renewalWindowRatioEnv overrides every runtime's renewal window at once (CLI
+// obtain and the Synology daemon both build configs here). It exists mainly so
+// operators can force an early renewal to exercise the renew-and-redeploy path
+// without waiting out a certificate's natural 1/3 window.
+const renewalWindowRatioEnv = "DNSACME_RENEWAL_WINDOW_RATIO"
+
+// resolveRenewalWindowRatio picks the effective renewal window with environment
+// beating config beating CertMagic's default. Values outside (0, 1] at any level
+// fall through to the next one, so a typo can never disable renewal entirely.
+func resolveRenewalWindowRatio(configValue float64) float64 {
+	if raw := strings.TrimSpace(os.Getenv(renewalWindowRatioEnv)); raw != "" {
+		if ratio, err := strconv.ParseFloat(raw, 64); err == nil && ratio > 0 && ratio <= 1 {
+			return ratio
+		}
+	}
+	if configValue > 0 && configValue <= 1 {
+		return configValue
+	}
+	return certmagic.DefaultRenewalWindowRatio
 }
 
 func newCertMagicConfig(conf *Config, logger *zap.Logger) *certmagic.Config {
 	return &certmagic.Config{
-		RenewalWindowRatio: certmagic.DefaultRenewalWindowRatio,
-		KeySource:          certmagic.StandardKeyGenerator{KeyType: certmagic.KeyType(conf.KeyType)},
+		RenewalWindowRatio: resolveRenewalWindowRatio(conf.RenewalWindowRatio),
+		KeySource:          certmagic.StandardKeyGenerator{KeyType: certmagic.KeyType(normalizeKeyType(conf.KeyType))},
 		Storage:            &certmagic.FileStorage{Path: conf.StorageDir},
 		Logger:             logger,
 		OnEvent:            OnEvent(conf),
@@ -99,7 +211,11 @@ func newACMEIssuer(conf *Config, magic *certmagic.Config, dnsProvider certmagic.
 		Logger: logger,
 	})
 
-	if conf.ZeroSSLCA {
+	// An explicit endpoint is used by staging and custom-CA callers. ZeroSSLCA
+	// remains the legacy CLI selector when no endpoint was supplied.
+	if conf.CA != "" {
+		issuer.CA = conf.CA
+	} else if conf.ZeroSSLCA {
 		issuer.CA = certmagic.ZeroSSLProductionCA
 		if len(conf.EABKeyID) > 0 && len(conf.EABHMACKey) > 0 {
 			issuer.ExternalAccount = &acme.EAB{
@@ -116,15 +232,19 @@ func newACMEIssuer(conf *Config, magic *certmagic.Config, dnsProvider certmagic.
 	return issuer
 }
 
-func newManagedConfig(magic *certmagic.Config, logger *zap.Logger) *certmagic.Config {
+func newManagedConfigWithCache(magic *certmagic.Config, logger *zap.Logger) (*certmagic.Config, *certmagic.Cache) {
+	var managed *certmagic.Config
 	cache := certmagic.NewCache(certmagic.CacheOptions{
 		GetConfigForCert: func(cert certmagic.Certificate) (*certmagic.Config, error) {
-			return magic, nil
+			// Return the cache-bound config rather than the template passed to New;
+			// renewal callbacks need the issuer and EventHook on this final value.
+			return managed, nil
 		},
 		Logger: logger,
 	})
 
-	return certmagic.New(cache, *magic)
+	managed = certmagic.New(cache, *magic)
+	return managed, cache
 }
 
 func emitCertObtainedEvents(ctx context.Context, conf *Config) {

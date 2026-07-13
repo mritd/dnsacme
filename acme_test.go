@@ -87,7 +87,44 @@ func TestNewACMEIssuerSelectsCAAndEAB(t *testing.T) {
 	}
 }
 
+func TestResolveRenewalWindowRatio(t *testing.T) {
+	tests := []struct {
+		name   string
+		env    string
+		config float64
+		want   float64
+	}{
+		{name: "EnvOverridesConfig", env: "0.9", config: 0.5, want: 0.9},
+		{name: "EnvBoundaryOne", env: "1", config: 0.5, want: 1},
+		{name: "EnvInvalidFallsBackToConfig", env: "not-a-number", config: 0.5, want: 0.5},
+		{name: "EnvOutOfRangeFallsBackToConfig", env: "1.5", config: 0.5, want: 0.5},
+		{name: "EnvZeroFallsBackToConfig", env: "0", config: 0.5, want: 0.5},
+		{name: "ConfigOnly", env: "", config: 0.25, want: 0.25},
+		{name: "ConfigOutOfRangeFallsBackToDefault", env: "", config: 1.5, want: certmagic.DefaultRenewalWindowRatio},
+		{name: "ConfigNegativeFallsBackToDefault", env: "", config: -0.3, want: certmagic.DefaultRenewalWindowRatio},
+		{name: "AllUnsetUsesDefault", env: "", config: 0, want: certmagic.DefaultRenewalWindowRatio},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv(renewalWindowRatioEnv, tt.env)
+			if got := resolveRenewalWindowRatio(tt.config); got != tt.want {
+				t.Fatalf("resolveRenewalWindowRatio(%v) with env %q = %v, want %v", tt.config, tt.env, got, tt.want)
+			}
+		})
+	}
+
+	// The resolved value must reach the CertMagic config used for management.
+	t.Setenv(renewalWindowRatioEnv, "")
+	magic := newCertMagicConfig(&Config{KeyType: "p384", StorageDir: t.TempDir(), RenewalWindowRatio: 0.9}, newACMELogger())
+	if magic.RenewalWindowRatio != 0.9 {
+		t.Fatalf("configured renewal window ratio was not plumbed: %v", magic.RenewalWindowRatio)
+	}
+}
+
 func TestCertMagicConfigAndManagedConfig(t *testing.T) {
+	// Keep the default-ratio assertion below hermetic against a developer shell
+	// that happens to export the override.
+	t.Setenv(renewalWindowRatioEnv, "")
 	conf := &Config{
 		KeyType:       "rsa2048",
 		StorageDir:    t.TempDir(),
@@ -101,6 +138,9 @@ func TestCertMagicConfigAndManagedConfig(t *testing.T) {
 
 	logger := newACMELogger()
 	magic := newCertMagicConfig(conf, logger)
+	if source, ok := magic.KeySource.(certmagic.StandardKeyGenerator); !ok || source.KeyType != certmagic.RSA2048 {
+		t.Fatalf("unexpected key source: %#v", magic.KeySource)
+	}
 	if magic.RenewalWindowRatio != certmagic.DefaultRenewalWindowRatio {
 		t.Fatalf("unexpected renewal window ratio: %v", magic.RenewalWindowRatio)
 	}
@@ -110,8 +150,16 @@ func TestCertMagicConfigAndManagedConfig(t *testing.T) {
 	if magic.OnEvent == nil {
 		t.Fatal("expected event hook")
 	}
-	if got := newManagedConfig(magic, logger); got == nil {
+	managed, cache := newManagedConfigWithCache(magic, logger)
+	defer cache.Stop()
+	if managed == nil {
 		t.Fatal("expected managed config")
+	}
+
+	magic = newCertMagicConfig(&Config{KeyType: "P384", StorageDir: t.TempDir()}, logger)
+	source, ok := magic.KeySource.(certmagic.StandardKeyGenerator)
+	if !ok || source.KeyType != certmagic.P384 {
+		t.Fatalf("uppercase key type was not normalized: %#v", magic.KeySource)
 	}
 }
 
@@ -146,6 +194,9 @@ func TestObtainUsesInjectedRuntime(t *testing.T) {
 	manageCertificates = func(ctx context.Context, cfg *certmagic.Config, domains []string) error {
 		if cfg == nil {
 			t.Fatal("expected certmagic config")
+		}
+		if len(cfg.Issuers) == 0 {
+			t.Fatal("expected ACME issuer on managed config")
 		}
 		managedDomains = append([]string(nil), domains...)
 		cancel()

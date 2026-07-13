@@ -1,0 +1,22 @@
+{
+  "DNSACME.js": {
+    "SYNO.SDS.DNSACME.Application": {
+      "type": "app",
+      "title": "DNSACME",
+      "desc": "DNSACME",
+      "icon": "images/dnsacme_{0}.png",
+      "appWindow": "SYNO.SDS.DNSACME.MainWindow",
+      "allUsers": false,
+      "allowMultiInstance": false,
+      "hidden": false,
+      "depend": [
+        "SYNO.SDS.DNSACME.MainWindow"
+      ]
+    },
+    "SYNO.SDS.DNSACME.MainWindow": {
+      "type": "lib",
+      "title": "DNSACME",
+      "desc": "DNSACME"
+    }
+  }
+}

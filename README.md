@@ -1,6 +1,13 @@
-## DNSACME
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo-wordmark-dark.svg">
+    <img src="assets/logo-wordmark.svg" alt="dnsacme" width="300">
+  </picture>
+</p>
 
-Simple tool to manage ACME Cert(Ony Supported DNS-01).
+<p align="center"><a href="README.md">English</a> | <a href="README_CN.md">简体中文</a></p>
+
+<p align="center">Simple tool to manage ACME Cert (Only Supported DNS-01).</p>
 
 ### Features
 
@@ -11,6 +18,7 @@ Simple tool to manage ACME Cert(Ony Supported DNS-01).
 - Support multiple CA(Let's Encrypt/ZeroSSL)
 - Optional DNS providers at compile time (can be used to reduce file size)
 - No other dependencies except libc (support muslc)
+- Optional Synology DSM package with a native wizard UI and automatic certificate deployment to DSM
 
 ### Usage
 
@@ -41,6 +49,87 @@ Flags:
   -h, --help                        help for dnsacme
   -v, --version                     version for dnsacme
 ```
+
+### Synology DSM Package
+
+dnsacme is also available as a native package for Synology DSM 7.0 and later. The
+package adds a wizard to the DSM main menu, imports certificates through the DSM
+WebAPI, and runs an unprivileged background daemon for automatic renewal.
+
+- Configure the certificate, DNS provider, and DSM deployment from a native ExtJS wizard.
+- Validate every certificate configuration against the Let's Encrypt staging CA before production issuance.
+- Import the first certificate into DSM, optionally create it or set it as the DSM default, then re-import future renewals automatically.
+- Keep production and staging certificates in separate storage directories.
+- Send localized DSM notifications after a manual deployment or successful background renewal.
+- Preserve package configuration and certificate storage across package upgrades.
+
+Build the package (produces one SPK per architecture):
+
+```sh
+task synology
+# build/synology/dnsacme-amd64.spk   x86_64
+# build/synology/dnsacme-arm64.spk   aarch64
+```
+
+Install the SPK for your NAS architecture through **Package Center > Manual Install**
+or over SSH:
+
+```sh
+sudo /usr/syno/bin/synopkg install dnsacme-amd64.spk
+```
+
+Open **DNSACME** from the DSM main menu after installation. The normal setup flow is:
+
+1. Enter the certificate domain and ACME account email.
+2. Select a DNS provider and enter its credentials.
+3. Configure the local DSM account and certificate import options.
+4. Run **Test**. This requests a fresh staging certificate and verifies DSM login, but does not import the certificate.
+5. Run **Apply**. This requests the selected production certificate and imports it into DSM.
+
+The renewal daemon remains idle until **Apply** succeeds for the current configuration.
+Changing the domain, DNS credentials, DSM deployment target, CA mode, or **Force test
+certificates** invalidates the previous Test and Apply results. Run both steps again after
+one of those changes.
+
+#### Advanced options
+
+- **Renewal window ratio** controls how early CertMagic renews a certificate. Leave it blank to use the default `1/3`. High values are intended only for renewal testing and can exhaust CA rate limits quickly.
+- **Force test certificates** sends Apply and background renewal through the Let's Encrypt staging CA. DSM will report these certificates as untrusted. If the certificate is the DSM default, browsers may also warn when opening DSM. Turn this option off, run Test, then run Apply to restore a trusted production certificate.
+- **System notifications** sends separate DSM events for manual deployment and background renewal. A failed notification never marks a successful certificate deployment as failed.
+
+#### System notifications
+
+DSM stores third-party notification templates in a root-owned directory. The DNSACME
+package and daemon continue to run as the package user, but publishing notification
+templates requires one command over SSH:
+
+```sh
+sudo /var/packages/dnsacme/target/bin/dnsacme synology publish-notifications
+```
+
+The command publishes the English and Simplified Chinese catalogs, registers their event
+tags with DSM, and enables notifications. The wizard compares the published files with
+the templates embedded in the installed binary. If files are missing or outdated, it
+shows the publish command again. Sending notifications after setup does not require root.
+
+DSM may keep an already loaded notification string in memory. If wording remains stale
+after publishing an updated template, restart DSM once to reload its notification cache.
+
+To remove the root-owned notification catalog, run this command before uninstalling the
+package:
+
+```sh
+sudo /var/packages/dnsacme/target/bin/dnsacme synology publish-notifications --disable
+```
+
+#### Package details
+
+- DSM version: 7.0 or later.
+- Architectures: `x86_64` (`amd64`, GOAMD64 v2) and `aarch64` (`arm64`).
+- Runtime user: the DSM package account, not root.
+- Configuration: `/var/packages/dnsacme/etc/config.yaml` with mode `0600`.
+- Certificate and log data: `/var/packages/dnsacme/var`.
+- Project link: [github.com/mritd/dnsacme](https://github.com/mritd/dnsacme).
 
 ### DNS Config
 
@@ -146,6 +235,4 @@ dnsacme uses environment variables prefixed with `ACME_`, which are defined as f
 | `ACME_OBTAINING_HOOK` | `--obtaining-hook` | `/opt/scripts/acme-obtaining-hook.sh`                          |
 | `ACME_OBTAINED_HOOK`  | `--obtained-hook`  | `/opt/scripts/acme-obtained-hook.sh`                           |
 | `ACME_FAILED_HOOK`    | `--failed-hook`    | `/opt/scripts/acme-failed-hook.sh`                             |
-
-
 

@@ -1,0 +1,5 @@
+#!/bin/sh
+# Configuration normalization happens on read, keeping upgrades independent of
+# the Package Center target-directory swap. Notification templates are published
+# by start-stop-status on start.
+exit 0

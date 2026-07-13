@@ -1,0 +1,18 @@
+
+[DNSACMECertRenewed]
+Category: DNSACME
+Level: NOTIFICATION_INFO
+Title: Certificate renewed
+Desktop: DNSACME renewed the certificate %CERT_DOMAIN% and imported it into DSM
+Subject: DNSACME certificate renewed on %HOSTNAME%
+
+DNSACME renewed the certificate %CERT_DOMAIN% and imported it into DSM on %DATE% %TIME%.
+
+[DNSACMECertDeployed]
+Category: DNSACME
+Level: NOTIFICATION_INFO
+Title: Certificate applied
+Desktop: DNSACME applied the certificate %CERT_DOMAIN% to DSM
+Subject: DNSACME certificate applied on %HOSTNAME%
+
+DNSACME applied the certificate %CERT_DOMAIN% to DSM on %DATE% %TIME%.

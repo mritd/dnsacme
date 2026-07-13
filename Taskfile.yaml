@@ -170,6 +170,56 @@ tasks:
       - task: linux-mips64
       - task: linux-mips64le
 
+  synology:
+    desc: Build Synology packages for common DSM architectures
+    vars:
+      OUT: build/synology
+    cmds:
+      - |
+        build_pkg() {
+          arch="$1"
+          goamd64="$2"
+          dsm_arch="$3"
+          work="{{.OUT}}/work-${arch}"
+          pkg="{{.OUT}}/dnsacme-${arch}.spk"
+
+          # DSM installs an outer uncompressed SPK containing package.tgz,
+          # lifecycle scripts, package metadata, and privilege declarations.
+          rm -rf "$work"
+          mkdir -p "$work/package/bin" "$work/package/scripts" "$work/package/ui" "$work/conf" "{{.OUT}}"
+          GOOS=linux GOARCH="$arch" GOAMD64="$goamd64" CGO_ENABLED=0 \
+            go build -trimpath -ldflags "-s -w" -o "$work/package/bin/dnsacme" .
+          cp -R synology/spk/conf/. "$work/conf/"
+          # Go and DSM use different architecture tokens. Render one architecture
+          # per SPK so Package Center cannot install the wrong binary artifact.
+          sed "s/^arch=.*/arch=\"${dsm_arch}\"/" synology/spk/INFO > "$work/package/INFO"
+          cp -R synology/spk/scripts/. "$work/package/scripts/"
+          cp -R synology/spk/ui/. "$work/package/ui/"
+          # synonotify templates are embedded into the binary (go:embed) and the
+          # one-time root `synology publish-notifications` command publishes them
+          # into /var/cache/texts/DNSACME, so package.tgz ships no separate
+          # notification directory.
+          chmod +x "$work/package/scripts/start-stop-status"
+          chmod +x "$work/package/scripts/preupgrade" "$work/package/scripts/postupgrade"
+          chmod +x "$work/package/scripts/postuninst"
+          chmod +x "$work/package/ui/api.cgi"
+          (cd "$work/package" && tar -czf package.tgz bin ui)
+          mv "$work/package/package.tgz" "$work/package.tgz"
+          cp "$work/package/INFO" "$work/INFO"
+          # Package Center reads icons from base64 INFO fields before package.tgz
+          # is unpacked, so embed both launcher sizes in the outer manifest.
+          {
+            printf 'package_icon="%s"\n' "$(base64 < synology/spk/PACKAGE_ICON.PNG | tr -d '\n')"
+            printf 'package_icon_256="%s"\n' "$(base64 < synology/spk/PACKAGE_ICON_256.PNG | tr -d '\n')"
+          } >> "$work/INFO"
+          cp -R "$work/package/scripts" "$work/scripts"
+          (cd "$work" && tar -cf "../dnsacme-${arch}.spk" INFO package.tgz scripts conf)
+          echo "$pkg"
+        }
+
+        build_pkg amd64 v2 x86_64
+        build_pkg arm64 "" aarch64
+
   gofmt:
     cmds:
       - go install golang.org/x/tools/cmd/goimports@latest

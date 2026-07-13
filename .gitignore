@@ -1,4 +1,8 @@
 
+# Local planning artifacts are intentionally excluded from versioned sources.
+.superpowers/
+docs/superpowers/
+
 # Created by https://www.toptal.com/developers/gitignore/api/macos,linux,windows,goland,java,node
 # Edit at https://www.toptal.com/developers/gitignore?templates=macos,linux,windows,goland,java,node
 
@@ -272,7 +276,7 @@ $RECYCLE.BIN/
 # End of https://www.toptal.com/developers/gitignore/api/macos,linux,windows,goland,java,node
 
 
-build/
+/build/
 dnsacme
 
 ### Go test artifacts ###

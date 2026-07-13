@@ -1,0 +1,18 @@
+
+[DNSACMECertRenewed]
+Category: DNSACME
+Level: NOTIFICATION_INFO
+Title: 证书已续期
+Desktop: DNSACME 已续期证书 %CERT_DOMAIN% 并导入 DSM
+Subject: DNSACME 已在 %HOSTNAME% 上续期证书
+
+DNSACME 已于 %DATE% %TIME% 续期证书 %CERT_DOMAIN% 并导入 DSM.
+
+[DNSACMECertDeployed]
+Category: DNSACME
+Level: NOTIFICATION_INFO
+Title: 证书已应用
+Desktop: DNSACME 已将证书 %CERT_DOMAIN% 应用到 DSM
+Subject: DNSACME 已在 %HOSTNAME% 上应用证书
+
+DNSACME 已于 %DATE% %TIME% 将证书 %CERT_DOMAIN% 应用到 DSM.
