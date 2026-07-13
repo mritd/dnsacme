@@ -90,6 +90,7 @@ func runSynologyPublishNotifications(configPath string, disable bool) error {
 			return err
 		}
 		cfg.NotificationsEnabled = false
+		cfg.NotificationCatalogRegistered = false
 		if err := saveSynologyConfig(configPath, cfg); err != nil {
 			return err
 		}
@@ -102,6 +103,7 @@ func runSynologyPublishNotifications(configPath string, disable bool) error {
 	if !synologyNotificationTemplatesPresent() {
 		return fmt.Errorf("published notification templates are not visible under %s", synologyNotificationCacheDir)
 	}
+	cfg.NotificationCatalogRegistered = true
 	cfg.NotificationsEnabled = true
 	if err := saveSynologyConfig(configPath, cfg); err != nil {
 		return err
@@ -232,7 +234,16 @@ func removeSynologyNotificationTemplates() error {
 // The persisted toggle is the user's intent and the live catalog check is the
 // authority, so a disabled toggle or a missing catalog both suppress delivery.
 func synologyNotificationsDeliverable(cfg SynologyConfig) bool {
-	return cfg.NotificationsEnabled && synologyNotificationTemplatesPresent()
+	return cfg.NotificationsEnabled && synologyNotificationCatalogReady(cfg)
+}
+
+// synologyNotificationCatalogReady combines the persistent file check with a
+// per-install registration marker. DSM preserves /var/cache/texts across package
+// uninstall, while its browser-side notification strings can remain cached. A
+// matching file alone therefore cannot prove notification_utils ran for this
+// installation and emitted the string-refresh event.
+func synologyNotificationCatalogReady(cfg SynologyConfig) bool {
+	return cfg.NotificationCatalogRegistered && synologyNotificationTemplatesPresent()
 }
 
 // reconcileSynologyNotifications checks the published catalog against the persisted
@@ -252,7 +263,7 @@ func reconcileSynologyNotifications(configPath string) {
 	if !cfg.NotificationsEnabled {
 		return
 	}
-	if synologyNotificationTemplatesPresent() {
+	if synologyNotificationCatalogReady(cfg) {
 		return
 	}
 	appendSynologyLog(cfg, "notifications are enabled but the DSM text catalog is missing (DSM may have rebuilt its notification database); re-publish with: "+synologyPublishCommand)

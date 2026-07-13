@@ -59,19 +59,9 @@ type SynologyConfig struct {
 	// RenewalWindowRatio tunes how early background renewal fires (remaining:total
 	// lifetime, 0 = CertMagic default 1/3). It is deliberately a top-level field so
 	// it stays outside ConfigHash: changing only the window must not invalidate the
-	// staged-test/apply authorization the way certificate-identity inputs do. The
+	// current test and apply results the way certificate-identity inputs do. The
 	// daemon still reloads on change through renewalReloadKey.
 	RenewalWindowRatio float64 `json:"renewalWindowRatio,omitempty" yaml:"renewalWindowRatio,omitempty"`
-	// ForceStaging routes the production apply and renewal daemon through Let's
-	// Encrypt's staging CA and its separate storage root. It exists so a renewal
-	// test (usually paired with a high RenewalWindowRatio) can loop on staging's
-	// vastly higher rate limits instead of the 5-per-week production duplicate
-	// limit; the resulting certificate is untrusted, so DSM shows it as invalid
-	// until a production certificate is reapplied. Unlike RenewalWindowRatio, this
-	// changes which CA and storage are deployed, so it is part of ConfigHash: a
-	// toggle must revoke the previous test/apply authorization before the daemon
-	// can import a certificate from the newly selected CA.
-	ForceStaging bool `json:"forceStaging,omitempty" yaml:"forceStaging,omitempty"`
 	// NotificationsEnabled turns DSM system notifications for certificate deploy and
 	// renewal events on. Publishing the localized text catalog into the root-owned
 	// /var/cache/texts needs root, but only once: the user runs a one-time
@@ -79,16 +69,23 @@ type SynologyConfig struct {
 	// run as the package user), which publishes the catalog and sets this flag. Once
 	// published the catalog is persistent, so later toggles are plain non-root config
 	// flips. It is top-level and kept out of ConfigHash (it never affects certificate
-	// issuance or the test/apply authorization) but folded into renewalReloadKey so a
+	// issuance or the test/apply results) but folded into renewalReloadKey so a
 	// toggle reloads the daemon and its renewal deploy hook observes the change
 	// instead of sending with a stale captured value. The reload is driven by a poll,
 	// so a renewal landing within one poll interval of the toggle can still miss
 	// (enable) or rely on the live present() check (disable); the worst case is a
 	// single skipped notification, never a wrong-state send.
-	NotificationsEnabled bool                   `json:"notificationsEnabled,omitempty" yaml:"notificationsEnabled,omitempty"`
-	Reconfiguring        bool                   `json:"reconfiguring,omitempty" yaml:"reconfiguring,omitempty"`
-	LastTest             SynologyOperationState `json:"lastTest,omitempty" yaml:"lastTest,omitempty"`
-	LastApply            SynologyOperationState `json:"lastApply,omitempty" yaml:"lastApply,omitempty"`
+	NotificationsEnabled bool `json:"notificationsEnabled,omitempty" yaml:"notificationsEnabled,omitempty"`
+	// NotificationCatalogRegistered records that publish-notifications registered
+	// the catalog during this package installation. DSM keeps the global catalog
+	// across uninstall, but a new browser session may have cached notification
+	// strings before the package was reinstalled. Re-registering emits DSM's string
+	// refresh event; a fresh config therefore requires one publish even when the
+	// preserved catalog bytes already match.
+	NotificationCatalogRegistered bool                   `json:"notificationCatalogRegistered,omitempty" yaml:"notificationCatalogRegistered,omitempty"`
+	Reconfiguring                 bool                   `json:"reconfiguring,omitempty" yaml:"reconfiguring,omitempty"`
+	LastTest                      SynologyOperationState `json:"lastTest,omitempty" yaml:"lastTest,omitempty"`
+	LastApply                     SynologyOperationState `json:"lastApply,omitempty" yaml:"lastApply,omitempty"`
 }
 
 // SynologyACMEConfig contains certificate request inputs owned by the wizard.
@@ -346,11 +343,11 @@ func (cfg SynologyConfig) RuntimeConfig(staging bool) Config {
 		ZeroSSLCA:          strings.EqualFold(cfg.ACME.CA, "zerossl"),
 		RenewalWindowRatio: cfg.RenewalWindowRatio,
 	}
-	// ForceStaging makes the "production" runtime behave like staging: the huge
-	// staging rate limits let a renewal test loop freely. Staging always uses its
-	// own storage root so its untrusted certificate can never be confused with the
-	// production one by the suffix-matching certificate lookup in hookEnv.
-	if staging || cfg.ForceStaging {
+	// Staging always uses its own storage root so its untrusted certificate can
+	// never be confused with the production one by the suffix-matching certificate
+	// lookup in hookEnv. Apply and background renewal always use the selected
+	// production CA.
+	if staging {
 		runtime.StorageDir = cfg.Runtime.StagingDir
 		runtime.ZeroSSLCA = false
 		runtime.CA = certmagic.LetsEncryptStagingCA
@@ -371,22 +368,26 @@ func (cfg SynologyConfig) RuntimeConfig(staging bool) Config {
 }
 
 // ConfigHash fingerprints all normalized certificate inputs, including credentials
-// and runtime paths. It is an internal authorization token and must stay redacted;
+// and runtime paths. It is an internal state identity and must stay redacted;
 // UI reconfiguration state, operation timestamps, and messages are excluded.
 func (cfg SynologyConfig) ConfigHash() string {
 	cfg = normalizeSynologyConfig(cfg)
 	shape := struct {
-		ACME         SynologyACMEConfig    `json:"acme"`
-		DNS          SynologyDNSConfig     `json:"dns"`
-		Synology     SynologyDeployConfig  `json:"synology"`
-		Runtime      SynologyRuntimeConfig `json:"runtime"`
-		ForceStaging bool                  `json:"forceStaging"`
+		ACME               SynologyACMEConfig    `json:"acme"`
+		DNS                SynologyDNSConfig     `json:"dns"`
+		Synology           SynologyDeployConfig  `json:"synology"`
+		Runtime            SynologyRuntimeConfig `json:"runtime"`
+		LegacyForceStaging bool                  `json:"forceStaging"`
 	}{
-		ACME:         cfg.ACME,
-		DNS:          cfg.DNS,
-		Synology:     cfg.Synology,
-		Runtime:      cfg.Runtime,
-		ForceStaging: cfg.ForceStaging,
+		ACME:     cfg.ACME,
+		DNS:      cfg.DNS,
+		Synology: cfg.Synology,
+		Runtime:  cfg.Runtime,
+		// Preserve the old production hash shape so ordinary package upgrades do
+		// not suspend renewal. This slot is permanently false: a legacy config that
+		// used staging had a true hash and is intentionally forced to re-apply a
+		// trusted production certificate.
+		LegacyForceStaging: false,
 	}
 	data, _ := json.Marshal(shape)
 	sum := sha256.Sum256(data)
@@ -395,7 +396,7 @@ func (cfg SynologyConfig) ConfigHash() string {
 
 // renewalReloadKey fingerprints everything the renewal daemon must restart to
 // apply. RenewalWindowRatio sits outside ConfigHash on purpose (tuning it must
-// not revoke test/apply authorization), but the running CertMagic manager bakes
+// not invalidate test/apply results), but the running CertMagic manager bakes
 // the ratio in at start, so ratio changes still have to trigger a reload.
 // NotificationsEnabled is likewise outside ConfigHash, but the daemon captures it
 // in the renewal deploy hook's cfg, so a toggle must reload the daemon or an
@@ -403,12 +404,14 @@ func (cfg SynologyConfig) ConfigHash() string {
 func renewalReloadKey(cfg SynologyConfig) string {
 	return cfg.ConfigHash() +
 		"|ratio=" + strconv.FormatFloat(cfg.RenewalWindowRatio, 'g', -1, 64) +
-		"|notify=" + strconv.FormatBool(cfg.NotificationsEnabled)
+		"|notify=" + strconv.FormatBool(cfg.NotificationsEnabled) +
+		"|notify-registered=" + strconv.FormatBool(cfg.NotificationCatalogRegistered)
 }
 
-// CanApply allows production issuance only after this exact configuration has
-// passed staging validation.
-func (cfg SynologyConfig) CanApply() bool {
+// TestPassed reports whether this exact configuration passed the optional
+// staging diagnostic. It is presentation state only: production Apply validates
+// its inputs independently and is never gated by a staging result.
+func (cfg SynologyConfig) TestPassed() bool {
 	cfg = normalizeSynologyConfig(cfg)
 	return cfg.LastTest.Success && cfg.LastTest.ConfigHash == cfg.ConfigHash()
 }

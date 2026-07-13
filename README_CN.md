@@ -9,6 +9,10 @@
 
 <p align="center">一个管理 ACME 证书的简单工具，仅支持 DNS-01 验证。</p>
 
+### 界面截图
+
+<!-- 请使用 GitHub 网页编辑器在此处添加截图，避免将图片文件存入本仓库。 -->
+
 ### 功能
 
 - 基于 CertMagic 支持多个 DNS 服务商
@@ -55,7 +59,7 @@ Flags:
 dnsacme 也提供适用于 Synology DSM 7.0 及更高版本的原生套件。套件会在 DSM 主菜单中添加配置向导，通过 DSM WebAPI 导入证书，并以非特权用户运行后台守护进程，自动完成证书续期。
 
 - 通过原生 ExtJS 向导配置证书、DNS 服务商和 DSM 部署选项。
-- 每次修改证书配置后，必须先通过 Let's Encrypt staging CA 验证，才能申请生产证书。
+- 可以选择通过 Let's Encrypt staging CA 验证证书配置，测试过程不会部署证书。
 - 首次申请后将证书导入 DSM，可选择新建证书或设为 DSM 默认证书，后续续期成功后会自动重新导入。
 - 生产证书和 staging 证书使用独立的存储目录。
 - 手动部署或后台续期成功后，可发送本地化 DSM 系统通知。
@@ -65,14 +69,14 @@ dnsacme 也提供适用于 Synology DSM 7.0 及更高版本的原生套件。套
 
 ```sh
 task synology
-# build/synology/dnsacme-amd64.spk   x86_64
-# build/synology/dnsacme-arm64.spk   aarch64
+# build/dnsacme-synology-amd64.spk   x86_64
+# build/dnsacme-synology-arm64.spk   aarch64
 ```
 
 请根据 NAS 架构，通过 **套件中心 > 手动安装** 安装对应的 SPK，也可以通过 SSH 安装：
 
 ```sh
-sudo /usr/syno/bin/synopkg install dnsacme-amd64.spk
+sudo /usr/syno/bin/synopkg install dnsacme-synology-amd64.spk
 ```
 
 安装完成后，从 DSM 主菜单打开 **DNSACME**。正常配置流程如下：
@@ -80,15 +84,14 @@ sudo /usr/syno/bin/synopkg install dnsacme-amd64.spk
 1. 填写证书域名和 ACME 账户邮箱。
 2. 选择 DNS 服务商并填写凭据。
 3. 配置本机 DSM 账户和证书导入选项。
-4. 点击 **测试运行**。此操作会申请一张新的 staging 证书并验证 DSM 登录，但不会将证书导入 DSM。
-5. 点击 **应用**。此操作会申请所选的生产证书并导入 DSM。
+4. 可以选择点击 **测试运行**。此操作会申请一张新的 staging 证书并验证 DSM 登录，但不会将证书导入 DSM。测试成功后建议至少等待 10 分钟再应用，让 DNS 缓存中的测试 challenge 失效。
+5. 准备好后点击 **应用**。此操作会申请所选的生产证书并导入 DSM。也可以跳过测试直接应用，确认生产环境验证失败可能计入 CA 频率限制即可。
 
-只有当前配置成功完成 **应用** 后，续期守护进程才会开始工作。修改域名、DNS 凭据、DSM 部署目标、CA 模式或 **强制使用测试证书** 后，之前的测试和应用结果会失效，需要重新执行这两个步骤。
+只有当前配置成功完成 **应用** 后，续期守护进程才会开始工作。修改域名、DNS 凭据、DSM 部署目标或 CA 模式后，之前的测试和应用结果会失效。测试仍然可选，但修改后的配置必须成功应用一次才能开始自动续期。
 
 #### 高级选项
 
 - **续期窗口比例**控制 CertMagic 提前多久续期证书。留空时使用默认值 `1/3`。较高的值仅适合测试续期流程，可能很快耗尽 CA 频率限制。
-- **强制使用测试证书**会让应用和后台续期使用 Let's Encrypt staging CA。DSM 会将这些证书标记为不受信任。如果同时将证书设为 DSM 默认证书，浏览器打开 DSM 时也可能显示警告。关闭此选项后，重新执行测试运行和应用，即可恢复受信任的生产证书。
 - **系统通知**会分别发送手动部署和后台续期事件。通知发送失败不会将已经成功的证书部署标记为失败。
 
 #### 系统通知

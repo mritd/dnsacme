@@ -3,6 +3,9 @@
 .superpowers/
 docs/superpowers/
 
+# Locally generated screenshots and other temporary artifacts.
+/artifacts/
+
 # Created by https://www.toptal.com/developers/gitignore/api/macos,linux,windows,goland,java,node
 # Edit at https://www.toptal.com/developers/gitignore?templates=macos,linux,windows,goland,java,node
 

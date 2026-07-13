@@ -134,8 +134,34 @@ func TestSynologyUIReconfigurationStateIsServerBacked(t *testing.T) {
 	if !strings.Contains(source, "reloadData.config.reconfiguring") {
 		t.Fatal("HTTP 0 reconfiguration does not reconcile persisted server state")
 	}
-	if !strings.Contains(source, "this.applyBtn.setDisabled(true);") {
-		t.Fatal("reconfiguration does not immediately disable production apply")
+	if !strings.Contains(source, "this.setActionsBusy(false);") {
+		t.Fatal("reconfiguration does not restore the independent Test and Apply actions")
+	}
+}
+
+func TestSynologyUIOffersOptionalTestAndDirectProductionApply(t *testing.T) {
+	sourceBytes, err := os.ReadFile("synology/spk/ui/DNSACME.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(sourceBytes)
+
+	for _, marker := range []string{
+		`me.requestAction("test-run")`,
+		`me.requestAction("apply")`,
+		`dialog.applyUntestedBody`,
+		`dialog.applyRecentTestBody`,
+		`dialog.testSuccessBody`,
+		`10 * 60 * 1000`,
+	} {
+		if !strings.Contains(source, marker) {
+			t.Fatalf("optional test/apply flow is missing %q", marker)
+		}
+	}
+	for _, removed := range []string{"fForceStaging", "option.forceStaging", "hint.needTest", "updateApplyGate"} {
+		if strings.Contains(source, removed) {
+			t.Fatalf("removed staging gate remains in the UI: %s", removed)
+		}
 	}
 }
 
@@ -171,6 +197,30 @@ func TestSynologyUILogLevelsAreColoredAfterEscaping(t *testing.T) {
 	for _, marker := range []string{"dnsacme-log-error", "dnsacme-log-warn", "Ext.util.Format.htmlEncode(line)"} {
 		if !strings.Contains(source, marker) {
 			t.Fatalf("colored log rendering is missing %s", marker)
+		}
+	}
+}
+
+func TestSynologyUILogRefreshTargetsVisibleArea(t *testing.T) {
+	sourceBytes, err := os.ReadFile("synology/spk/ui/DNSACME.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(sourceBytes)
+	for _, marker := range []string{
+		"visibleLogArea: function ()",
+		`me.setLogArea(me.visibleLogArea(), data.logs || "")`,
+	} {
+		if !strings.Contains(source, marker) {
+			t.Fatalf("visible log refresh is missing %q", marker)
+		}
+	}
+	for _, hiddenRefresh := range []string{
+		"me.setLogArea(me.logsArea,",
+		"me.setLogArea(me.deployedLogsArea,",
+	} {
+		if strings.Contains(source, hiddenRefresh) {
+			t.Fatalf("log polling still refreshes a hidden area: %s", hiddenRefresh)
 		}
 	}
 }

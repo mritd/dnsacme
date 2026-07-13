@@ -52,8 +52,6 @@ SYNO.SDS.DNSACME.I18N = {
     "field.renewalWindowRatio": "Renewal window ratio",
     "placeholder.renewalWindowRatio": "Default 1/3",
     "hint.renewalWindowRatio": "For testing only, leave blank in production. Renews automatically once the remaining certificate lifetime falls below this ratio (blank = the default 1/3). A high value such as the maximum 0.9993 renews a 90-day Let's Encrypt certificate about every 30 minutes and will quickly hit the CA rate limit; only change it to exercise the renewal pipeline.",
-    "option.forceStaging": "Force test (staging) certificates",
-    "hint.forceStaging": "For testing only, do not enable in production. Issues from Let's Encrypt staging (huge rate limits) and imports the result into DSM. Staging certificates are untrusted, so DSM will report an invalid certificate. If 'Set as default certificate' is on, this also replaces DSM's default certificate, so your browser may warn about the DSM login page itself. Turn this off and run Apply again to restore a trusted production certificate.",
     "option.notifications": "Enable system notifications",
     "hint.notifications": "Sends a DSM notification when a certificate is deployed or renewed. The first time you enable this, run a one-time command over SSH to publish the notification templates (shown when you turn it on).",
     "dialog.publishTitle": "One-time notification setup",
@@ -67,15 +65,13 @@ SYNO.SDS.DNSACME.I18N = {
     "hint.detectionFailed": "DSM connection could not be detected. Confirm the protocol and port.",
     "title.autoUpdate": "Auto Update",
     "subtitle.autoUpdate": "Configure DSM sign-in and certificate deployment",
-    "hint.needTest": "Apply unlocks after a successful test run.",
     "title.validateApply": "Validate & Apply",
-    "subtitle.validateApply": "Run staging validation before applying a production certificate",
+    "subtitle.validateApply": "Optionally test with staging, or apply a production certificate directly",
     "title.running": "Auto Update Running",
     "summary.domain": "Domain",
     "summary.provider": "DNS Provider",
     "summary.keyType": "Key type",
     "summary.issuer": "Issuer",
-    "summary.issuerStaging": "{ca}(staging)",
     "summary.lastApplied": "Last applied",
     "status.loadFailed": "Load failed: {error}",
     "status.saving": "Saving...",
@@ -83,15 +79,19 @@ SYNO.SDS.DNSACME.I18N = {
     "status.saved": "Saved",
     "status.requestingStaging": "Requesting a staging certificate...",
     "status.requestingProduction": "Requesting a production certificate...",
-    "status.requestingForceStaging": "Requesting a test (staging) certificate...",
-    "status.stagingComplete": "Staging validation completed",
+    "status.stagingComplete": "Staging validation completed; wait at least 10 minutes before Apply",
     "status.productionApplied": "Production certificate applied",
-    "status.forceStagingApplied": "Test (staging) certificate applied; DSM will report it invalid",
     "status.openingConfiguration": "Opening configuration...",
     "status.reconfigureFailed": "Unable to start reconfiguration: {error}",
     "status.failed": "Failed: {reason}",
     "dialog.testFailed": "Test run failed",
     "dialog.applyFailed": "Apply failed",
+    "dialog.testSuccessTitle": "Test run succeeded",
+    "dialog.testSuccessBody": "The staging certificate was issued successfully and was not deployed to DSM. DNS resolvers may still cache its challenge record. Wait at least 10 minutes before Apply to reduce the chance of production validation seeing stale DNS data.",
+    "dialog.applyUntestedTitle": "Apply without a test run?",
+    "dialog.applyUntestedBody": "This configuration has not passed a staging test. Apply will request a production certificate immediately, and a validation failure may count against the certificate authority's production rate limits. Continue?",
+    "dialog.applyRecentTestTitle": "DNS cache may still contain test data",
+    "dialog.applyRecentTestBody": "The staging test completed less than 10 minutes ago. Applying now may fail if DNS resolvers still cache the staging challenge. Continue anyway?",
     "error.label": "Error",
     "error.dsmLogin": "Unable to sign in to DSM. Check the DSM address, account, and password.",
     "error.dnsValidation": "DNS validation failed. The TXT record may not have propagated to every DNS server yet. Wait a few minutes and try again.",
@@ -145,8 +145,6 @@ SYNO.SDS.DNSACME.I18N = {
     "field.renewalWindowRatio": "续期窗口比例",
     "placeholder.renewalWindowRatio": "默认 1/3",
     "hint.renewalWindowRatio": "仅供测试, 正式环境请留空. 证书剩余有效期占比低于该值时自动续期 (留空为默认 1/3). 设为接近上限的 0.9993 会让 90 天 Let's Encrypt 证书约每 30 分钟续期一次, 很快触发 CA 限额, 仅用于验证续期流程.",
-    "option.forceStaging": "强制使用测试证书",
-    "hint.forceStaging": "仅供测试, 正式环境请勿开启. 改用 Let's Encrypt 测试环境(限额极高)申请证书并导入 DSM. 测试证书不受信任, DSM 会显示证书无效. 若同时开启了'设为默认证书', 还会替换 DSM 的默认证书, 浏览器访问 DSM 登录页本身也可能提示证书无效. 测试完成后关闭此项并重新点击'应用'即可恢复受信任的正式证书.",
     "option.notifications": "启用系统通知",
     "hint.notifications": "证书部署或续期时发送 DSM 通知. 首次启用需通过 SSH 执行一条一次性命令以发布通知模板(打开开关时会给出).",
     "dialog.publishTitle": "一次性通知设置",
@@ -160,15 +158,13 @@ SYNO.SDS.DNSACME.I18N = {
     "hint.detectionFailed": "未能自动探测本机 DSM 端口, 请确认协议和端口.",
     "title.autoUpdate": "自动更新",
     "subtitle.autoUpdate": "配置 DSM 登录和证书部署方式",
-    "hint.needTest": "'应用'需先成功运行一次'测试运行'.",
     "title.validateApply": "验证并应用",
-    "subtitle.validateApply": "先完成测试环境验证, 再申请并应用正式证书",
+    "subtitle.validateApply": "可选择测试运行, 也可以直接申请并应用正式证书",
     "title.running": "自动更新运行中",
     "summary.domain": "域名",
     "summary.provider": "DNS 提供商",
     "summary.keyType": "密钥类型",
     "summary.issuer": "颁发机构",
-    "summary.issuerStaging": "{ca}(staging)",
     "summary.lastApplied": "最近应用",
     "status.loadFailed": "加载失败: {error}",
     "status.saving": "正在保存...",
@@ -176,15 +172,19 @@ SYNO.SDS.DNSACME.I18N = {
     "status.saved": "已保存",
     "status.requestingStaging": "正在申请测试证书...",
     "status.requestingProduction": "正在申请正式证书...",
-    "status.requestingForceStaging": "正在申请测试(staging)证书...",
-    "status.stagingComplete": "测试环境验证完成",
+    "status.stagingComplete": "测试环境验证完成, 建议至少等待 10 分钟后再应用",
     "status.productionApplied": "正式证书已应用",
-    "status.forceStagingApplied": "测试(staging)证书已应用, DSM 会显示证书无效",
     "status.openingConfiguration": "正在打开配置...",
     "status.reconfigureFailed": "无法开始重新配置: {error}",
     "status.failed": "失败: {reason}",
     "dialog.testFailed": "测试运行失败",
     "dialog.applyFailed": "应用失败",
+    "dialog.testSuccessTitle": "测试运行成功",
+    "dialog.testSuccessBody": "测试证书已成功签发, 但不会部署到 DSM. DNS 解析器可能仍缓存测试 challenge 记录. 建议至少等待 10 分钟后再点击'应用', 以降低正式验证读取到旧 DNS 数据的概率.",
+    "dialog.applyUntestedTitle": "不测试直接应用?",
+    "dialog.applyUntestedBody": "当前配置尚未通过测试环境验证. '应用'会立即申请正式证书, 验证失败可能计入证书颁发机构的生产环境频率限制. 是否继续?",
+    "dialog.applyRecentTestTitle": "DNS 缓存可能仍包含测试数据",
+    "dialog.applyRecentTestBody": "测试运行完成尚不足 10 分钟. 如果 DNS 解析器仍缓存测试 challenge, 立即应用可能失败. 是否仍要继续?",
     "error.label": "错误",
     "error.dsmLogin": "DSM 无法登录, 请检查 DSM 地址, 账号和密码.",
     "error.dnsValidation": "DNS 验证失败, TXT 记录可能尚未同步到全部 DNS 节点, 请等待几分钟后重试.",
@@ -313,10 +313,6 @@ SYNO.SDS.DNSACME.injectCss = function () {
     ".dnsacme-log-error { color:#d93025; font-weight:600; }",
     ".dnsacme-log-warn { color:#c56a00; font-weight:600; }",
     ".dnsacme-hint { color:#8b95a1; font-size:12px; margin:2px 0 12px; }",
-    // Step-4 apply gate: the disabled Apply button carries an explanatory tooltip
-    // (hint.needTest) and Test is emphasized as the primary action. Driven solely
-    // by the backend canApply flag, so a stale prior test result can never
-    // masquerade as the current state; the subtitle carries the test-first copy.
     ".dnsacme-deployed { color:#414b54; padding:4px 0 30px; }",
     ".dnsacme-deployed-title { font-size:18px; font-weight:700; color:#2c333a; margin-bottom:18px; }",
     ".dnsacme-deployed-grid { display:grid; grid-template-columns:repeat(2, minmax(240px, 1fr)); column-gap:36px; row-gap:10px; max-width:720px; }",
@@ -466,8 +462,8 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
     me.statusText = new Ext.Toolbar.TextItem(SYNO.SDS.DNSACME.t("status.loadingConfig"));
     me.prevBtn = new SYNO.ux.Button({ text: SYNO.SDS.DNSACME.t("button.previous"), handler: me.prev, scope: me });
     me.nextBtn = new SYNO.ux.Button({ text: SYNO.SDS.DNSACME.t("button.next"), btnStyle: "blue", handler: me.next, scope: me });
-    me.testBtn = new SYNO.ux.Button({ text: SYNO.SDS.DNSACME.t("button.testRun"), handler: function () { me.runAction("test-run"); } });
-    me.applyBtn = new SYNO.ux.Button({ text: SYNO.SDS.DNSACME.t("button.apply"), btnStyle: "blue", disabled: true, handler: function () { me.runAction("apply"); } });
+    me.testBtn = new SYNO.ux.Button({ text: SYNO.SDS.DNSACME.t("button.testRun"), handler: function () { me.requestAction("test-run"); } });
+    me.applyBtn = new SYNO.ux.Button({ text: SYNO.SDS.DNSACME.t("button.apply"), btnStyle: "blue", handler: function () { me.requestAction("apply"); } });
     me.reconfigBtn = new SYNO.ux.Button({ text: SYNO.SDS.DNSACME.t("button.reconfigure"), handler: me.reconfigure, scope: me });
 
     me.mainPanel = new Ext.Panel({
@@ -626,8 +622,7 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
     this.forceWizard = true;
     this.deployedMode = false;
     this.cfg = cfg;
-    this.applyBtn.setDisabled(true);
-    this.updateApplyGate(false);
+    this.setActionsBusy(false);
     if (this.stepper) {
       this.stepper.show();
       this.mainPanel.doLayout();
@@ -771,7 +766,7 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
   // is touched, leaving the centered-column width/margin CSS untouched.
   fitLogHeight: function () {
     var me = this;
-    var area = me.deployedMode ? me.deployedLogsArea : (me.step === 3 ? me.logsArea : null);
+    var area = me.visibleLogArea();
     if (!area || !area.rendered || !area.el || !me.cards || !me.cards.el) { return; }
     var pre = area.el.dom;
     var regionBottom = me.cards.el.dom.getBoundingClientRect().bottom;
@@ -782,6 +777,10 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
     var atBottom = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 24;
     pre.style.height = h + "px";
     if (atBottom) { pre.scrollTop = pre.scrollHeight; }
+  },
+
+  visibleLogArea: function () {
+    return this.deployedMode ? this.deployedLogsArea : (this.step === 3 ? this.logsArea : null);
   },
 
   buildCertificate: function () {
@@ -883,11 +882,6 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
     me.renewRatioHint = new Ext.BoxComponent({
       autoEl: { tag: "div", cls: "dnsacme-field-note dnsacme-field-warn", html: SYNO.SDS.DNSACME.t("hint.renewalWindowRatio") }
     });
-    // Testing knob: route production issuance/renewal through the LE staging CA.
-    me.fForceStaging = new SYNO.ux.Checkbox({ boxLabel: SYNO.SDS.DNSACME.t("option.forceStaging"), hideLabel: true, style: "margin-top:6px" });
-    me.forceStagingHint = new Ext.BoxComponent({
-      autoEl: { tag: "div", cls: "dnsacme-field-note dnsacme-field-warn", html: SYNO.SDS.DNSACME.t("hint.forceStaging") }
-    });
     // System notifications persist through their own CGI action (not the form save).
     // Enabling before the one-time publish command has run returns needsPublish, and
     // the check handler shows that command. setNotifyChecked keeps the control's
@@ -914,7 +908,7 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
     me.advPanel = new Ext.Panel({
       border: false, hidden: true, hideLabel: true, cls: "dnsacme-adv-panel", layout: "form", labelWidth: 160, labelAlign: "right",
       bodyStyle: "padding:0", defaults: { msgTarget: "side" },
-      items: [me.fHost, me.fScheme, me.fPort, me.renewRatioRow, me.renewRatioHint, me.fForceStaging, me.forceStagingHint, me.fNotify, me.notifyHint],
+      items: [me.fHost, me.fScheme, me.fPort, me.renewRatioRow, me.renewRatioHint, me.fNotify, me.notifyHint],
       listeners: {
         afterrender: function (panel) {
           me.advHintEl = panel.body.insertFirst({
@@ -1023,38 +1017,10 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
     });
   },
 
-  // Toggle DSM's primary (blue) emphasis on a button by adding/removing the same
-  // class btnStyle:"blue" applies.
-  setBtnPrimary: function (btn, isPrimary) {
-    if (!btn || !btn.rendered || !btn.el) { return; }
-    btn.el[isPrimary ? "addClass" : "removeClass"]("syno-ux-button-blue");
-  },
-
-  // updateApplyGate is the single source of truth for the step-4 apply gate.
-  // Apply is enabled only when the backend reports canApply (a successful test
-  // whose config still matches). While it is disabled the disabled Apply button
-  // carries an explanatory tooltip and Test is emphasized as the primary action;
-  // once enabled the tooltip clears and Test drops to secondary. It depends
-  // solely on the canApply boolean, so there is no persisted "failed"/"untested"
-  // state to go stale. While a test is in flight (me._testing) both buttons stay
-  // disabled regardless of canApply; the panel mask communicates progress.
-  updateApplyGate: function (canApply) {
-    var me = this;
-    var testing = !!me._testing;
-    var locked = !canApply;
-    if (me.applyBtn) {
-      me.applyBtn.setDisabled(locked || testing);
-      // Best-effort qtip; a disabled button may not fire mouseover, so the inline
-      // hint remains the primary explanation.
-      if (me.applyBtn.setTooltip) {
-        try { me.applyBtn.setTooltip(locked ? SYNO.SDS.DNSACME.t("hint.needTest") : ""); }
-        catch (ignore) {}
-      }
-    }
-    if (me.testBtn) {
-      if (!testing) { me.testBtn.setDisabled(false); }
-      me.setBtnPrimary(me.testBtn, locked);
-    }
+  setActionsBusy: function (busy) {
+    this._actionRunning = !!busy;
+    if (this.testBtn) { this.testBtn.setDisabled(!!busy); }
+    if (this.applyBtn) { this.applyBtn.setDisabled(!!busy); }
   },
 
   buildDeployed: function () {
@@ -1088,9 +1054,6 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
     var lastApply = cfg.lastApply && cfg.lastApply.at ? new Date(cfg.lastApply.at).toLocaleString() : "";
     var keyLabel = keyType === "rsa4096" ? "RSA 4096" : (keyType === "rsa2048" ? "RSA 2048" : keyType);
     var caLabel = ca === "letsencrypt" ? "Let's Encrypt" : (ca === "zerossl" ? "ZeroSSL" : ca);
-    // Force test certificates routes issuance through LE staging, so the deployed
-    // certificate is untrusted even though cfg.acme.ca still names a real CA.
-    if (cfg.forceStaging) { caLabel = SYNO.SDS.DNSACME.t("summary.issuerStaging", { ca: caLabel || "-" }); }
     var html = [
       '<div class="dnsacme-deployed-title">' + SYNO.SDS.DNSACME.t("title.running") + '</div>',
       '<div class="dnsacme-deployed-grid">',
@@ -1193,18 +1156,16 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
       SYNO.SDS.DNSACME.request("config", "GET", null, function (ok2, data2) {
         if (me._closed) { return; }
         if (!ok2) { me.unmaskMain(); me.setStatus(SYNO.SDS.DNSACME.t("status.loadFailed", { error: data2 })); return; }
-        me.applyConfig(data2.config, data2.canApply, data2.canRenew, data2.persisted, data2.detected, data2.notificationsPublished);
+        me.applyConfig(data2.config, data2.testPassed, data2.canRenew, data2.persisted, data2.detected, data2.notificationsPublished);
         me.unmaskMain();
         me.setStatus(opts.status || SYNO.SDS.DNSACME.t("status.ready"), opts.error);
       }, me);
     }, me);
   },
 
-  applyConfig: function (cfg, canApply, canRenew, persisted, detected, notificationsPublished) {
+  applyConfig: function (cfg, testPassed, canRenew, persisted, detected, notificationsPublished) {
     var me = this;
-    // A full re-render is the authoritative end of any in-flight test run, so
-    // clear the flag before updateApplyGate restores the button states.
-    me._testing = false;
+    me.setActionsBusy(false);
     // cfg is already redacted by the CGI. Mask sentinels are intentionally kept
     // in the controls; mergeSecrets restores their persisted values on save.
     me.cfg = cfg;
@@ -1240,7 +1201,6 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
     // 0 / absent means "CertMagic default"; show it as a blank field rather than
     // a literal 0 so the placeholder can explain the default.
     me.fRenewRatio.setValue(cfg.renewalWindowRatio > 0 ? cfg.renewalWindowRatio : "");
-    me.fForceStaging.setValue(!!cfg.forceStaging);
     // Notifications persist through their own action; reflect the server value
     // without firing the toggle handler and keep it out of the step's dirty state.
     me.setNotifyChecked(!!cfg.notificationsEnabled);
@@ -1250,8 +1210,7 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
     if (cfg.notificationsEnabled && notificationsPublished === false) {
       me.setStatus(SYNO.SDS.DNSACME.t("status.notificationsNeedPublish") + " " + SYNO.SDS.DNSACME.t("dialog.publishCommand"));
     }
-    me._canApply = canApply;
-    me.updateApplyGate(canApply);
+    me._testPassed = !!testPassed;
     for (var i = 0; i < me.stepForms.length; i++) { me.markStepClean(i); }
     if (canRenew && !me.forceWizard) {
       me.enterDeployedView(cfg);
@@ -1289,9 +1248,6 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
       // Top level like the persisted YAML: the ratio tunes renewal timing only,
       // so the backend keeps it out of the identity hash. Blank posts 0 (default).
       renewalWindowRatio: Number(me.fRenewRatio.getValue()) || 0,
-      // Also top level and outside the identity hash: a testing toggle that routes
-      // issuance through the LE staging CA.
-      forceStaging: me.fForceStaging.getValue(),
       // Runtime paths are package-owned and have no editable controls. Preserve
       // the server-provided values instead of synthesizing browser-side paths.
       runtime: (me.cfg && me.cfg.runtime) || {}
@@ -1311,42 +1267,72 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
       }
       me.markStepClean(me.step);
       if (opts.refresh === false) {
-        // Step navigation only needs the saved config and apply gate. Avoid a
-        // full applyConfig call here because rebuilding dynamic fields would
+        // Step navigation only needs the saved config and optional test state.
+        // Avoid a full applyConfig call because rebuilding dynamic fields would
         // disturb focus and dirty tracking before the next card is shown.
         me.cfg = data.config;
-        me._canApply = data.canApply;
-        me.updateApplyGate(data.canApply);
+        me._testPassed = !!data.testPassed;
       } else {
-        me.applyConfig(data.config, data.canApply, data.canRenew, data.persisted, data.detected, data.notificationsPublished);
+        me.applyConfig(data.config, data.testPassed, data.canRenew, data.persisted, data.detected, data.notificationsPublished);
       }
       me.setStatus(SYNO.SDS.DNSACME.t("status.saved"));
       if (cb) { cb.call(scope || me); }
     }, me);
   },
 
+  requestAction: function (action) {
+    var me = this;
+    if (me._actionRunning) { return; }
+    if (action !== "apply") {
+      me.runAction(action);
+      return;
+    }
+    if (!me._testPassed) {
+      me.showApplyConfirmation("dialog.applyUntestedTitle", "dialog.applyUntestedBody");
+      return;
+    }
+    var testedAt = me.cfg && me.cfg.lastTest && me.cfg.lastTest.at ? new Date(me.cfg.lastTest.at).getTime() : 0;
+    if (testedAt && Date.now() - testedAt < 10 * 60 * 1000) {
+      me.showApplyConfirmation("dialog.applyRecentTestTitle", "dialog.applyRecentTestBody");
+      return;
+    }
+    me.runAction("apply");
+  },
+
+  showApplyConfirmation: function (titleKey, bodyKey) {
+    var me = this;
+    me.getMsgBox().show({
+      title: SYNO.SDS.DNSACME.t(titleKey),
+      msg: Ext.util.Format.htmlEncode(SYNO.SDS.DNSACME.t(bodyKey)),
+      buttons: Ext.MessageBox.YESNO,
+      icon: Ext.MessageBox.WARNING,
+      minWidth: 420,
+      maxWidth: 560,
+      fn: function (button) {
+        if (button === "yes") { me.runAction("apply"); }
+      }
+    });
+  },
+
+  showTestSuccessDialog: function () {
+    this.getMsgBox().show({
+      title: SYNO.SDS.DNSACME.t("dialog.testSuccessTitle"),
+      msg: Ext.util.Format.htmlEncode(SYNO.SDS.DNSACME.t("dialog.testSuccessBody")),
+      buttons: Ext.MessageBox.OK,
+      icon: Ext.MessageBox.INFO,
+      minWidth: 420,
+      maxWidth: 560
+    });
+  },
+
   runAction: function (action) {
     var me = this;
-    if (action === "test-run") {
-      // Mark the run in flight and disable both buttons up front to close the
-      // double-click window. _testing keeps them disabled through the pre-run
-      // save's re-render; the panel mask below then communicates progress, and
-      // the post-run applyConfig clears _testing and restores the buttons.
-      me._testing = true;
-      me.testBtn.setDisabled(true);
-      me.applyBtn.setDisabled(true);
-      me.updateApplyGate(me._canApply);
-    }
+    me.setActionsBusy(true);
     me.save(function () {
       if (me._closed) { return; }
-      // A production apply routes through LE staging when Force test certificates
-      // is on, so the status line must announce staging rather than production.
-      var forceStaging = action === "apply" && me.fForceStaging && me.fForceStaging.getValue();
       var requesting = action === "test-run"
         ? SYNO.SDS.DNSACME.t("status.requestingStaging")
-        : (forceStaging
-          ? SYNO.SDS.DNSACME.t("status.requestingForceStaging")
-          : SYNO.SDS.DNSACME.t("status.requestingProduction"));
+        : SYNO.SDS.DNSACME.t("status.requestingProduction");
       me.setStatus(requesting);
       me.mainPanel.el.mask(requesting, "x-mask-loading");
       SYNO.SDS.DNSACME.request(action, "POST", {}, function (ok, data) {
@@ -1359,42 +1345,36 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
         if (action === "apply") { me.forceWizard = false; }
         me.setStatus(action === "test-run"
           ? SYNO.SDS.DNSACME.t("status.stagingComplete")
-          : (forceStaging
-            ? SYNO.SDS.DNSACME.t("status.forceStagingApplied")
-            : SYNO.SDS.DNSACME.t("status.productionApplied")));
-        me.finishAction(action);
+          : SYNO.SDS.DNSACME.t("status.productionApplied"));
+        me.finishAction(action, data);
       }, me);
     }, me, {
-      // Skip the field-rebuilding applyConfig here: navigation stays on step 4,
-      // and rebuilding would clear _testing mid-run. The refresh:false branch
-      // only re-derives the gate.
+      // Skip the field-rebuilding applyConfig here: navigation stays on step 4
+      // while the long-running task owns the mask and action buttons.
       refresh: false,
-      // A failed pre-run save returns without invoking the callback; clear the
-      // in-flight flag and restore the gate so the buttons don't stay stuck.
       onFail: function () {
-        if (action === "test-run") {
-          me._testing = false;
-          me.updateApplyGate(me._canApply);
-        }
+        me.setActionsBusy(false);
       }
     });
   },
 
   // finishAction settles the wizard after a test-run or apply reported success
-  // (directly or via reconcileActionState). A passed test-run only needs Apply
-  // unlocked: the config is unchanged, so it deliberately skips the full reload.
+  // (directly or via reconcileActionState). A passed test-run records diagnostic
+  // state and stays on the final step; Apply was already available independently.
   // DSM's SCGI gateway resets long test-run/apply POSTs and can stall the very
   // next requests, and a full loadAll there leaves the wizard stuck on "loading
-  // configuration" with both buttons frozen. Enabling the gate here is safe because
-  // the apply action re-validates the staged-test authorization server-side. An
-  // apply must still reload to render the deployed view.
-  finishAction: function (action) {
+  // configuration" with both buttons frozen. Apply still reloads the deployed view.
+  finishAction: function (action, data) {
     var me = this;
     if (action === "test-run") {
-      me._testing = false;
-      me._canApply = true;
-      me.updateApplyGate(true);
+      me.setActionsBusy(false);
+      me._testPassed = true;
+      if (data && data.config) {
+        if (data.config.acme) { me.cfg = data.config; }
+        else if (data.config.lastTest) { me.cfg.lastTest = data.config.lastTest; }
+      }
       me.loadLogs();
+      me.showTestSuccessDialog();
       return;
     }
     me.loadAll();
@@ -1408,7 +1388,7 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
     SYNO.SDS.DNSACME.request("status", "GET", null, function (ok, data) {
       if (me._closed) { return; }
       var completed = ok && (
-        (action === "test-run" && data.canApply) ||
+        (action === "test-run" && data.testPassed) ||
         (action === "apply" && data.canRenew)
       );
       if (completed) {
@@ -1416,7 +1396,7 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
         me.setStatus(action === "test-run"
           ? SYNO.SDS.DNSACME.t("status.stagingComplete")
           : SYNO.SDS.DNSACME.t("status.productionApplied"));
-        me.finishAction(action);
+        me.finishAction(action, action === "test-run" ? { config: { lastTest: data.lastTest } } : data);
         return;
       }
       SYNO.SDS.DNSACME.request("logs", "GET", null, function (logsOk, logsData) {
@@ -1507,8 +1487,10 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
     var me = this;
     SYNO.SDS.DNSACME.request("logs", "GET", null, function (ok, data) {
       if (me._closed || !ok) { return; }
-      me.setLogArea(me.logsArea, data.logs || "");
-      me.setLogArea(me.deployedLogsArea, data.logs || "");
+      // Updating a hidden <pre> gives it clientHeight=0, which makes the tail
+      // detector preserve scrollTop=0. Refresh only the visible log so a newly
+      // entered view starts pinned to the latest line.
+      me.setLogArea(me.visibleLogArea(), data.logs || "");
     }, me);
   },
 

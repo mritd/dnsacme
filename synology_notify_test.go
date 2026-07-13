@@ -43,6 +43,10 @@ func stubSynologyNotificationsPublished(t *testing.T) {
 	t.Cleanup(func() { synologyNotificationTemplatesPresent = old })
 }
 
+func markSynologyNotificationCatalogRegistered(cfg *SynologyConfig) {
+	cfg.NotificationCatalogRegistered = true
+}
+
 func TestSynologyRenewalDeployHookNotifiesOnlyOnSuccessfulImport(t *testing.T) {
 	dir := t.TempDir()
 	server := fakeSynologyServerWithCerts(t, map[string]string{"dnsacme": "cert-id-1"}, nil)
@@ -54,6 +58,7 @@ func TestSynologyRenewalDeployHookNotifiesOnlyOnSuccessfulImport(t *testing.T) {
 	cfg.Synology.Host = host
 	cfg.Synology.Port = atoiForTest(port)
 	cfg.NotificationsEnabled = true
+	markSynologyNotificationCatalogRegistered(&cfg)
 	stubSynologyNotificationsPublished(t)
 	writeStoredCert(t, cfg.Runtime.StorageDir, cfg.ACME.Domains[0])
 
@@ -243,6 +248,7 @@ func TestReconcileSynologyNotificationsKeepsEnabledWhenPresent(t *testing.T) {
 	stubSynologyNotificationsPublished(t) // present() is true
 	cfg := validSynologyConfig(dir)
 	cfg.NotificationsEnabled = true
+	markSynologyNotificationCatalogRegistered(&cfg)
 	if err := saveSynologyConfig(path, cfg); err != nil {
 		t.Fatal(err)
 	}
@@ -265,6 +271,7 @@ func TestReconcileSynologyNotificationsKeepsIntentWhenCatalogMissing(t *testing.
 	retargetSynologyNotificationCache(t) // empty -> present() is false
 	cfg := validSynologyConfig(dir)
 	cfg.NotificationsEnabled = true
+	markSynologyNotificationCatalogRegistered(&cfg)
 	if err := saveSynologyConfig(path, cfg); err != nil {
 		t.Fatal(err)
 	}
@@ -367,7 +374,9 @@ func TestCGIConfigResponseIncludesNotificationsPublished(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")
 	stubSynologyNotificationsPublished(t) // present() is true
-	if err := saveSynologyConfig(path, validSynologyConfig(dir)); err != nil {
+	cfg := validSynologyConfig(dir)
+	markSynologyNotificationCatalogRegistered(&cfg)
+	if err := saveSynologyConfig(path, cfg); err != nil {
 		t.Fatal(err)
 	}
 	payload, err := cgiConfig(http.MethodGet, path, nil)
@@ -381,7 +390,7 @@ func TestCGIConfigResponseIncludesNotificationsPublished(t *testing.T) {
 }
 
 // NotificationsEnabled must not touch the identity hash (so a toggle never
-// revokes test/apply authorization) but must change the reload key, so the daemon
+// invalidates test/apply state) but must change the reload key, so the daemon
 // reloads and its renewal deploy hook stops using a stale captured value.
 func TestNotificationsEnabledStaysOutOfHashButReloadsDaemon(t *testing.T) {
 	dir := t.TempDir()
@@ -394,6 +403,21 @@ func TestNotificationsEnabledStaysOutOfHashButReloadsDaemon(t *testing.T) {
 	}
 	if renewalReloadKey(on) == renewalReloadKey(off) {
 		t.Fatal("toggling NotificationsEnabled must change the renewal reload key")
+	}
+}
+
+func TestNotificationCatalogRegistrationStaysOutOfHashButReloadsDaemon(t *testing.T) {
+	dir := t.TempDir()
+	registered := validSynologyConfig(dir)
+	registered.NotificationsEnabled = true
+	registered.NotificationCatalogRegistered = true
+	unregistered := registered
+	unregistered.NotificationCatalogRegistered = false
+	if registered.ConfigHash() != unregistered.ConfigHash() {
+		t.Fatal("notification registration must not affect the certificate config hash")
+	}
+	if renewalReloadKey(registered) == renewalReloadKey(unregistered) {
+		t.Fatal("publishing the notification catalog must reload the daemon")
 	}
 }
 
@@ -447,12 +471,35 @@ func TestCGINotificationsEnableWithoutCatalogNeedsPublish(t *testing.T) {
 	}
 }
 
+// DSM preserves the global notification catalog across package uninstall, but a
+// fresh package config has no proof that notification_utils re-registered it and
+// emitted the browser string-refresh event. Matching bytes alone must therefore
+// still request publish once after a reinstall.
+func TestCGINotificationsFreshInstallWithPreservedCatalogNeedsPublish(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	stubSynologyNotificationsPublished(t) // preserved files exactly match
+	if err := saveSynologyConfig(path, validSynologyConfig(dir)); err != nil {
+		t.Fatal(err)
+	}
+	payload, err := cgiNotifications(path, strings.NewReader(`{"enabled":true}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, _ := payload.(map[string]any)
+	if resp["needsPublish"] != true || resp["enabled"] != false {
+		t.Fatalf("fresh install with a preserved catalog must re-publish, got %v", resp)
+	}
+}
+
 // Once the catalog is published, enabling is a plain non-root config flip.
 func TestCGINotificationsEnableWithCatalogPersists(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")
 	stubSynologyNotificationsPublished(t) // present() is true
-	if err := saveSynologyConfig(path, validSynologyConfig(dir)); err != nil {
+	cfg := validSynologyConfig(dir)
+	markSynologyNotificationCatalogRegistered(&cfg)
+	if err := saveSynologyConfig(path, cfg); err != nil {
 		t.Fatal(err)
 	}
 	payload, err := cgiNotifications(path, strings.NewReader(`{"enabled":true}`))
@@ -477,6 +524,7 @@ func TestCGINotificationsDisablePersistsAndKeepsCatalog(t *testing.T) {
 	retargetSynologyNotificationCache(t)
 	cfg := validSynologyConfig(dir)
 	cfg.NotificationsEnabled = true
+	markSynologyNotificationCatalogRegistered(&cfg)
 	if err := saveSynologyConfig(path, cfg); err != nil {
 		t.Fatal(err)
 	}
@@ -520,6 +568,9 @@ func TestRunSynologyPublishNotificationsPublishesAndEnables(t *testing.T) {
 	if !loaded.NotificationsEnabled {
 		t.Fatal("publish must enable notifications")
 	}
+	if !loaded.NotificationCatalogRegistered {
+		t.Fatal("publish must mark the catalog registered for this installation")
+	}
 }
 
 // --disable removes the catalog and clears the toggle.
@@ -530,6 +581,7 @@ func TestRunSynologyPublishNotificationsDisableRemovesAndClears(t *testing.T) {
 	stubSynologyIsRoot(t, true)
 	cfg := validSynologyConfig(dir)
 	cfg.NotificationsEnabled = true
+	markSynologyNotificationCatalogRegistered(&cfg)
 	if err := saveSynologyConfig(path, cfg); err != nil {
 		t.Fatal(err)
 	}
@@ -545,6 +597,9 @@ func TestRunSynologyPublishNotificationsDisableRemovesAndClears(t *testing.T) {
 	loaded, _ := loadSynologyConfig(path)
 	if loaded.NotificationsEnabled {
 		t.Fatal("--disable must clear the toggle")
+	}
+	if loaded.NotificationCatalogRegistered {
+		t.Fatal("--disable must clear the catalog registration marker")
 	}
 }
 
@@ -579,6 +634,7 @@ func TestCGIStatusReportsNotificationState(t *testing.T) {
 	stubSynologyNotificationsPublished(t) // present() is true
 	cfg := validSynologyConfig(dir)
 	cfg.NotificationsEnabled = true
+	markSynologyNotificationCatalogRegistered(&cfg)
 	if err := saveSynologyConfig(path, cfg); err != nil {
 		t.Fatal(err)
 	}
@@ -592,6 +648,12 @@ func TestCGIStatusReportsNotificationState(t *testing.T) {
 	}
 	if resp["notificationsPublished"] != true {
 		t.Fatalf("status must report notificationsPublished, got %v", resp["notificationsPublished"])
+	}
+	if _, exists := resp["testPassed"]; !exists {
+		t.Fatal("status must expose the optional staging test state")
+	}
+	if _, exists := resp["canApply"]; exists {
+		t.Fatal("status must not expose the removed staging apply gate")
 	}
 }
 

@@ -101,18 +101,9 @@ func freshSynologyStagingRuntime(cfg SynologyConfig) (Config, func(), error) {
 	return runtime, cleanup, nil
 }
 
-// runSynologyApply requires a matching staging result before it can issue a
-// production certificate and import it into DSM.
-// synologyIssuanceMode labels the CA the apply/renewal path actually uses, so the
-// package log and status messages stay honest when ForceStaging routes a
-// "production" apply through Let's Encrypt staging (an untrusted certificate).
-func synologyIssuanceMode(cfg SynologyConfig) string {
-	if cfg.ForceStaging {
-		return "staging (test)"
-	}
-	return "production"
-}
-
+// runSynologyApply independently validates the current configuration, requests
+// from the selected production CA, and imports the certificate into DSM. A prior
+// staging test is optional and never gates this path.
 func runSynologyApply(ctx context.Context, configPath string) (synologyTaskResult, error) {
 	cfg, err := loadSynologyConfig(configPath)
 	if err != nil {
@@ -123,10 +114,6 @@ func runSynologyApply(ctx context.Context, configPath string) (synologyTaskResul
 	if err := validateConfigForSynology(cfg, true); err != nil {
 		return newSynologyTaskResult(cfg, "failed"), err
 	}
-	if !cfg.CanApply() {
-		return newSynologyTaskResult(cfg, "blocked"), errors.New("current configuration has not passed staging validation")
-	}
-
 	appendSynologyLog(cfg, "checking DSM login")
 	if err := verifySynologyLogin(ctx, cfg.Synology); err != nil {
 		cfg.LastApply = SynologyOperationState{Success: false, At: time.Now(), ConfigHash: cfg.ConfigHash(), Message: "DSM login failed: " + err.Error()}
@@ -136,13 +123,12 @@ func runSynologyApply(ctx context.Context, configPath string) (synologyTaskResul
 	}
 	appendSynologyLog(cfg, "DSM login succeeded")
 
-	mode := synologyIssuanceMode(cfg)
-	appendSynologyLog(cfg, "starting "+mode+" ACME issuance")
+	appendSynologyLog(cfg, "starting production ACME issuance")
 	runtime := cfg.RuntimeConfig(false)
 	if err := ObtainOnce(ctx, &runtime, false); err != nil {
 		cfg.LastApply = SynologyOperationState{Success: false, At: time.Now(), ConfigHash: cfg.ConfigHash(), Message: err.Error()}
 		_ = saveSynologyConfig(configPath, cfg)
-		appendSynologyLog(cfg, mode+" ACME issuance failed: "+err.Error())
+		appendSynologyLog(cfg, "production ACME issuance failed: "+err.Error())
 		return newSynologyTaskResult(cfg, "failed"), err
 	}
 
@@ -174,7 +160,7 @@ func runSynologyApply(ctx context.Context, configPath string) (synologyTaskResul
 		if err := ObtainOnce(ctx, &runtime, false); err != nil {
 			cfg.LastApply = SynologyOperationState{Success: false, At: time.Now(), ConfigHash: cfg.ConfigHash(), Message: err.Error()}
 			_ = saveSynologyConfig(configPath, cfg)
-			appendSynologyLog(cfg, "replacement "+mode+" ACME issuance failed: "+err.Error())
+			appendSynologyLog(cfg, "replacement production ACME issuance failed: "+err.Error())
 			return newSynologyTaskResult(cfg, "failed"), err
 		}
 		keyPath, certPath, err = findStoredCertificate(ctx, runtime.StorageDir, cfg.ACME.Domains[0])
@@ -192,11 +178,7 @@ func runSynologyApply(ctx context.Context, configPath string) (synologyTaskResul
 	}
 
 	cfg.Reconfiguring = false
-	appliedMessage := "production certificate applied"
-	if cfg.ForceStaging {
-		appliedMessage = "staging (test) certificate applied; DSM will report it invalid until Force test certificates is turned off and re-applied"
-	}
-	cfg.LastApply = SynologyOperationState{Success: true, At: time.Now(), ConfigHash: cfg.ConfigHash(), Message: appliedMessage}
+	cfg.LastApply = SynologyOperationState{Success: true, At: time.Now(), ConfigHash: cfg.ConfigHash(), Message: "production certificate applied"}
 	if err := saveSynologyConfig(configPath, cfg); err != nil {
 		return synologyTaskResult{}, err
 	}
@@ -262,17 +244,12 @@ func runSynologyDaemon(ctx context.Context, configPath string) error {
 			continue
 		}
 
-		// Log the effective ratio (after the env override) and staging mode so a
-		// manual renewal test can confirm from the package log which window and CA
-		// the manager actually uses.
-		caMode := "production"
-		if cfg.ForceStaging {
-			caMode = "staging (test certificates, untrusted in DSM)"
-		}
-		appendSynologyLog(cfg, fmt.Sprintf("starting renewal daemon (renewal window ratio %.4g, CA %s)", resolveRenewalWindowRatio(runtime.RenewalWindowRatio), caMode))
+		// Log the effective ratio (after the env override) and production mode so a
+		// manual renewal test can confirm which window and CA the manager uses.
+		appendSynologyLog(cfg, fmt.Sprintf("starting renewal daemon (renewal window ratio %.4g, CA production)", resolveRenewalWindowRatio(runtime.RenewalWindowRatio)))
 		// The hook must resolve certificates from the runtime the manager actually
-		// uses (staging storage under ForceStaging), never a hardcoded production
-		// path, or a renewed test certificate would not be found for DSM import.
+		// uses, never a hardcoded storage path, or a renewed certificate might not
+		// be found for DSM import.
 		runtime.EventHook = synologyRenewalDeployHook(cfg, runtime.StorageDir)
 		managerCtx, cancelManager := context.WithCancel(ctx)
 		stop, err := startACMEManagement(managerCtx, &runtime, false)

@@ -175,6 +175,7 @@ func cgiConfig(method, configPath string, input io.Reader) (any, error) {
 	// Notifications are owned by their dedicated action (which also performs the
 	// root check and catalog publish). A normal form save must never toggle them.
 	next.NotificationsEnabled = current.NotificationsEnabled
+	next.NotificationCatalogRegistered = current.NotificationCatalogRegistered
 	// The UI only receives redacted values. A mask sentinel or an unchanged empty
 	// secret means "keep the persisted value" rather than erase credentials.
 	next = mergeSecrets(next, current)
@@ -204,10 +205,9 @@ func cgiReconfigure(method, configPath string) (any, error) {
 		return nil, err
 	}
 	cfg.Reconfiguring = true
-	// Re-entering the wizard always requires a fresh staging validation, even if
-	// the user ultimately keeps every field unchanged. Keep LastApply intact so
-	// the currently deployed certificate remains eligible for background renewal.
-	cfg.LastTest = SynologyOperationState{}
+	// Re-entering the wizard does not erase an optional staging result when the
+	// user keeps the configuration unchanged. ConfigHash invalidates it naturally
+	// if a subsequent form save changes certificate inputs.
 	if err := saveSynologyConfig(configPath, cfg); err != nil {
 		return nil, err
 	}
@@ -242,7 +242,7 @@ func cgiNotifications(configPath string, input io.Reader) (any, error) {
 		}
 		return synologyNotificationResponse(cfg), nil
 	}
-	if !synologyNotificationTemplatesPresent() {
+	if !synologyNotificationCatalogReady(cfg) {
 		// The one-time publish has not run yet (or DSM dropped the catalog). Do not
 		// persist an enabled state that cannot deliver; the UI shows the command.
 		return map[string]any{"enabled": false, "needsPublish": true}, nil
@@ -275,15 +275,15 @@ func cgiStatus(configPath string) (any, error) {
 	lastApply := cfg.LastApply
 	lastApply.ConfigHash = ""
 	return map[string]any{
-		"canApply":  cfg.CanApply(),
-		"canRenew":  cfg.CanRenew(),
-		"lastTest":  lastTest,
-		"lastApply": lastApply,
+		"testPassed": cfg.TestPassed(),
+		"canRenew":   cfg.CanRenew(),
+		"lastTest":   lastTest,
+		"lastApply":  lastApply,
 		// notificationsPublished lets the UI tell "enabled and deliverable" from
 		// "enabled but the catalog is gone" (DSM can drop it), so it can re-surface
 		// the one-time publish command instead of silently dropping notifications.
 		"notificationsEnabled":   cfg.NotificationsEnabled,
-		"notificationsPublished": synologyNotificationTemplatesPresent(),
+		"notificationsPublished": synologyNotificationCatalogReady(cfg),
 	}, nil
 }
 
@@ -351,14 +351,14 @@ func normalizeSynologyLogTimestamps(s string) string {
 func synologyConfigResponse(cfg SynologyConfig, configPath string) map[string]any {
 	cfg = normalizeSynologyConfig(cfg)
 	return map[string]any{
-		"config":   cfg.Redacted(),
-		"canApply": cfg.CanApply(),
-		"canRenew": cfg.CanRenew(),
+		"config":     cfg.Redacted(),
+		"testPassed": cfg.TestPassed(),
+		"canRenew":   cfg.CanRenew(),
 		// notificationsPublished lets the ordinary page load distinguish "enabled and
 		// deliverable" from "enabled but the catalog is gone", so the UI can warn and
 		// point at the one-time publish command instead of showing a silently dead
 		// checkbox. The config response is what applyConfig reads on load.
-		"notificationsPublished": synologyNotificationTemplatesPresent(),
+		"notificationsPublished": synologyNotificationCatalogReady(cfg),
 		"persisted":              synologyConfigPersisted(configPath),
 		"detected":               detectSynologyEndpoint(nginxConfPath()),
 	}

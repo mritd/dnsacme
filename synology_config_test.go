@@ -5,7 +5,9 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/x509"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
@@ -62,8 +64,8 @@ func TestSynologyConfigDefaultsSaveLoadAndHash(t *testing.T) {
 	}
 	hash := loaded.ConfigHash()
 	loaded.LastTest = SynologyOperationState{Success: true, At: time.Now(), ConfigHash: hash}
-	if !loaded.CanApply() {
-		t.Fatal("expected apply to be allowed after matching test hash")
+	if !loaded.TestPassed() {
+		t.Fatal("expected matching staging test to be reported")
 	}
 	if loaded.CanRenew() {
 		t.Fatal("expected renew to stay blocked before apply succeeds")
@@ -73,8 +75,8 @@ func TestSynologyConfigDefaultsSaveLoadAndHash(t *testing.T) {
 		t.Fatal("expected renew to be allowed after matching apply hash")
 	}
 	loaded.ACME.Domains = append(loaded.ACME.Domains, "www.example.com")
-	if loaded.CanApply() {
-		t.Fatal("expected config change to invalidate apply")
+	if loaded.TestPassed() {
+		t.Fatal("expected config change to invalidate the staging result")
 	}
 	if loaded.CanRenew() {
 		t.Fatal("expected config change to invalidate renew")
@@ -139,42 +141,51 @@ func TestSynologyRuntimeConfigStagingAndProduction(t *testing.T) {
 	}
 }
 
-func TestSynologyRuntimeConfigForceStaging(t *testing.T) {
-	cfg := validSynologyConfig(t.TempDir())
-	cfg.ACME.CA = "zerossl" // must be overridden by ForceStaging
-	cfg.ForceStaging = true
-
-	// The production runtime (used by apply and the renewal daemon) must switch to
-	// the staging CA and its own storage root so its untrusted certificate cannot
-	// collide with a production one under the suffix-matching lookup.
+func TestLegacyForceStagingCannotAffectProductionRuntime(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	legacy := []byte("acme:\n  ca: letsencrypt\nforceStaging: true\n")
+	if err := os.WriteFile(path, legacy, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := loadSynologyConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
 	production := cfg.RuntimeConfig(false)
-	if production.CA != certmagic.LetsEncryptStagingCA {
-		t.Fatalf("ForceStaging did not select the staging CA: %q", production.CA)
+	if production.CA != certmagic.LetsEncryptProductionCA {
+		t.Fatalf("legacy forceStaging changed production CA: %q", production.CA)
 	}
-	if production.ZeroSSLCA {
-		t.Fatal("ForceStaging must clear the ZeroSSL branch")
+	if production.StorageDir != cfg.Runtime.StorageDir {
+		t.Fatalf("legacy forceStaging changed production storage: %s", production.StorageDir)
 	}
-	if production.StorageDir != cfg.Runtime.StagingDir {
-		t.Fatalf("ForceStaging did not redirect to the staging storage root: %s", production.StorageDir)
-	}
+}
 
-	// ForceStaging changes the CA and storage that will be deployed, so toggling it
-	// must invalidate the prior test/apply authorization and stop the daemon until
-	// the newly selected mode passes through Test and Apply.
-	base := cfg
-	base.ForceStaging = false
-	if cfg.ConfigHash() == base.ConfigHash() {
-		t.Fatal("ForceStaging must affect the config hash")
+func TestConfigHashKeepsLegacyProductionShape(t *testing.T) {
+	cfg := normalizeSynologyConfig(validSynologyConfig(t.TempDir()))
+	legacyShape := struct {
+		ACME         SynologyACMEConfig    `json:"acme"`
+		DNS          SynologyDNSConfig     `json:"dns"`
+		Synology     SynologyDeployConfig  `json:"synology"`
+		Runtime      SynologyRuntimeConfig `json:"runtime"`
+		ForceStaging bool                  `json:"forceStaging"`
+	}{cfg.ACME, cfg.DNS, cfg.Synology, cfg.Runtime, false}
+	data, err := json.Marshal(legacyShape)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if renewalReloadKey(cfg) == renewalReloadKey(base) {
-		t.Fatal("ForceStaging must change the renewal reload key")
+	want := sha256.Sum256(data)
+	if got := cfg.ConfigHash(); got != hex.EncodeToString(want[:]) {
+		t.Fatalf("production config hash changed across ForceStaging removal: got %s", got)
 	}
-
-	hash := base.ConfigHash()
-	cfg.LastTest = SynologyOperationState{Success: true, At: time.Now(), ConfigHash: hash}
-	cfg.LastApply = SynologyOperationState{Success: true, At: time.Now(), ConfigHash: hash}
-	if cfg.CanApply() || cfg.CanRenew() {
-		t.Fatal("toggling ForceStaging must invalidate test/apply authorization")
+	legacyShape.ForceStaging = true
+	data, err = json.Marshal(legacyShape)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stagingHash := sha256.Sum256(data)
+	cfg.LastApply = SynologyOperationState{Success: true, ConfigHash: hex.EncodeToString(stagingHash[:])}
+	if cfg.CanRenew() {
+		t.Fatal("a legacy staging deployment must not renew after the option is removed")
 	}
 }
 
@@ -453,8 +464,8 @@ func TestCGIReconfigurePersistsWithoutInvalidatingRenewal(t *testing.T) {
 	if !loaded.CanRenew() {
 		t.Fatal("opening the wizard must not invalidate active renewal")
 	}
-	if loaded.CanApply() || loaded.LastTest.Success {
-		t.Fatal("opening the wizard must require a fresh staging validation")
+	if !loaded.TestPassed() || !loaded.LastTest.Success {
+		t.Fatal("opening the wizard must preserve a matching optional staging result")
 	}
 
 	// A regular form save cannot clear the server-owned mode flag.
@@ -570,6 +581,7 @@ func TestRunSynologyTestAndApply(t *testing.T) {
 	cfg.Synology.Port = atoiForTest(port)
 	cfg.Reconfiguring = true
 	cfg.NotificationsEnabled = true
+	markSynologyNotificationCatalogRegistered(&cfg)
 	stubSynologyNotificationsPublished(t)
 	if err := saveSynologyConfig(path, cfg); err != nil {
 		t.Fatal(err)
@@ -601,7 +613,7 @@ func TestRunSynologyTestAndApply(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !loaded.CanApply() {
+	if !loaded.TestPassed() {
 		t.Fatalf("persisted config should allow apply after test-run: %+v", loaded.LastTest)
 	}
 	if loaded.CanRenew() {
@@ -732,15 +744,35 @@ func TestCGITestRunAndApplyActions(t *testing.T) {
 	assertTaskResultRedacted(t, result)
 }
 
-func TestRunSynologyApplyRequiresTest(t *testing.T) {
+func TestRunSynologyApplyWithoutTest(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")
 	cfg := validSynologyConfig(dir)
+	setSynologyTestServer(t, &cfg)
 	if err := saveSynologyConfig(path, cfg); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := runSynologyApply(context.Background(), path); err == nil || !strings.Contains(err.Error(), "staging") {
-		t.Fatalf("expected staging validation error, got %v", err)
+	writeStoredCert(t, cfg.Runtime.StorageDir, cfg.ACME.Domains[0])
+	oldManage := manageCertificates
+	manageCertificates = func(ctx context.Context, cfg *certmagic.Config, domains []string) error { return nil }
+	defer func() { manageCertificates = oldManage }()
+
+	result, err := runSynologyApply(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.State != "ok" {
+		t.Fatalf("unexpected direct apply state: %s", result.State)
+	}
+	loaded, err := loadSynologyConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.TestPassed() {
+		t.Fatal("direct apply must not synthesize a staging result")
+	}
+	if !loaded.CanRenew() {
+		t.Fatal("successful direct apply must enable background renewal")
 	}
 }
 
@@ -976,8 +1008,8 @@ func TestRenewalWindowRatioTunesRenewalWithoutInvalidatingState(t *testing.T) {
 	if cfg.ConfigHash() != hash {
 		t.Fatal("renewal window ratio must stay outside the config hash")
 	}
-	if !cfg.CanApply() || !cfg.CanRenew() {
-		t.Fatal("tuning the renewal window must not invalidate test/apply authorization")
+	if !cfg.TestPassed() || !cfg.CanRenew() {
+		t.Fatal("tuning the renewal window must not invalidate test/apply state")
 	}
 	if got := cfg.RuntimeConfig(false).RenewalWindowRatio; got != 0.99 {
 		t.Fatalf("production runtime did not receive the ratio: %v", got)
@@ -1048,7 +1080,7 @@ func TestCGIConfigPersistsRenewalWindowRatioWithoutResettingState(t *testing.T) 
 	if loaded.RenewalWindowRatio != 0.99 {
 		t.Fatalf("CGI save did not persist the ratio: %v", loaded.RenewalWindowRatio)
 	}
-	if !loaded.CanRenew() || !loaded.CanApply() {
+	if !loaded.CanRenew() || !loaded.TestPassed() {
 		t.Fatal("a renewal-window-only save must keep test/apply state")
 	}
 }
@@ -1073,6 +1105,7 @@ func TestRunSynologyDaemonDeploysRenewedCertificate(t *testing.T) {
 	cfg.LastTest = SynologyOperationState{Success: true, At: time.Now(), ConfigHash: cfg.ConfigHash()}
 	cfg.LastApply = SynologyOperationState{Success: true, At: time.Now(), ConfigHash: cfg.ConfigHash()}
 	cfg.NotificationsEnabled = true
+	markSynologyNotificationCatalogRegistered(&cfg)
 	stubSynologyNotificationsPublished(t)
 	if err := saveSynologyConfig(path, cfg); err != nil {
 		t.Fatal(err)
@@ -1108,126 +1141,6 @@ func TestRunSynologyDaemonDeploysRenewedCertificate(t *testing.T) {
 	}
 	if len(notified) != 1 || notified[0] != "DNSACMECertRenewed|example.com" {
 		t.Fatalf("expected one renewal notification for example.com, got %v", notified)
-	}
-}
-
-// With ForceStaging enabled the daemon renews under the staging storage root, so
-// its deploy hook must resolve the renewed certificate from StagingDir. Writing
-// the cert ONLY to StagingDir (and never to the production StorageDir) proves the
-// hook follows runtime.StorageDir rather than a hard-coded production path.
-func TestRunSynologyDaemonForceStagingDeploysFromStagingDir(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "config.yaml")
-	imports := 0
-	server := fakeSynologyServerWithCerts(t, map[string]string{"dnsacme": "cert-id-1"}, func(fields map[string]string) {
-		imports++
-	})
-	u, _ := url.Parse(server.URL)
-	host, port, _ := strings.Cut(u.Host, ":")
-
-	cfg := validSynologyConfig(dir)
-	cfg.Synology.Scheme = u.Scheme
-	cfg.Synology.Host = host
-	cfg.Synology.Port = atoiForTest(port)
-	cfg.ForceStaging = true
-	cfg.LastTest = SynologyOperationState{Success: true, At: time.Now(), ConfigHash: cfg.ConfigHash()}
-	cfg.LastApply = SynologyOperationState{Success: true, At: time.Now(), ConfigHash: cfg.ConfigHash()}
-	if err := saveSynologyConfig(path, cfg); err != nil {
-		t.Fatal(err)
-	}
-	// Only the staging root holds the renewed certificate; the production root is
-	// intentionally left empty so a hook reading it would fail to find any files.
-	writeStoredCert(t, cfg.Runtime.StagingDir, cfg.ACME.Domains[0])
-
-	oldManage := manageCertificates
-	oldReload := waitForSynologyConfigChange
-	oldNotify := synologyNotifyCommand
-	synologyNotifyCommand = func(ctx context.Context, tag string, vars map[string]string) error { return nil }
-	manageCertificates = func(ctx context.Context, cfg *certmagic.Config, domains []string) error {
-		if len(cfg.Issuers) == 0 {
-			t.Fatal("expected an ACME issuer on the managed config")
-		}
-		if issuer, ok := cfg.Issuers[0].(*certmagic.ACMEIssuer); !ok || issuer.CA != certmagic.LetsEncryptStagingCA {
-			t.Fatalf("ForceStaging daemon must manage against the staging CA, got issuer %#v", cfg.Issuers[0])
-		}
-		return cfg.OnEvent(ctx, "cert_obtained", map[string]any{"identifier": domains[0], "renewal": true})
-	}
-	waitForSynologyConfigChange = func(ctx context.Context, configPath, activeKey string) bool { return false }
-	defer func() {
-		manageCertificates = oldManage
-		waitForSynologyConfigChange = oldReload
-		synologyNotifyCommand = oldNotify
-	}()
-
-	if err := runSynologyDaemon(context.Background(), path); err != nil {
-		t.Fatal(err)
-	}
-	if imports != 1 {
-		t.Fatalf("expected one DSM import from the staging storage root, got %d", imports)
-	}
-}
-
-// A ForceStaging apply issues from LE staging into DSM, so both the CA it uses and
-// the persisted LastApply message must disclose staging rather than claim a trusted
-// production certificate was applied.
-func TestRunSynologyApplyForceStagingRecordsStagingIssuance(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "config.yaml")
-	cfg := validSynologyConfig(dir)
-	server := fakeSynologyServer(t)
-	u, _ := url.Parse(server.URL)
-	host, port, _ := strings.Cut(u.Host, ":")
-	cfg.Synology.Scheme = u.Scheme
-	cfg.Synology.Host = host
-	cfg.Synology.Port = atoiForTest(port)
-	cfg.ForceStaging = true
-	cfg.LastTest = SynologyOperationState{Success: true, At: time.Now(), ConfigHash: cfg.ConfigHash()}
-	cfg.NotificationsEnabled = true
-	stubSynologyNotificationsPublished(t)
-	if err := saveSynologyConfig(path, cfg); err != nil {
-		t.Fatal(err)
-	}
-
-	oldManage := manageCertificates
-	manageCertificates = func(ctx context.Context, mc *certmagic.Config, domains []string) error {
-		if len(mc.Issuers) == 0 {
-			t.Fatal("expected an ACME issuer on the managed config")
-		}
-		if issuer, ok := mc.Issuers[0].(*certmagic.ACMEIssuer); !ok || issuer.CA != certmagic.LetsEncryptStagingCA {
-			t.Fatalf("apply must use the staging CA under ForceStaging, got issuer %#v", mc.Issuers[0])
-		}
-		return nil
-	}
-	defer func() { manageCertificates = oldManage }()
-
-	oldNotify := synologyNotifyCommand
-	var notified []string
-	synologyNotifyCommand = func(ctx context.Context, tag string, vars map[string]string) error {
-		notified = append(notified, tag+"|"+vars["%CERT_DOMAIN%"])
-		return nil
-	}
-	defer func() { synologyNotifyCommand = oldNotify }()
-
-	// ForceStaging routes issuance to StagingDir, so the resolvable cert lives there.
-	writeStoredCert(t, cfg.Runtime.StagingDir, cfg.ACME.Domains[0])
-
-	result, err := runSynologyApply(context.Background(), path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result.State != "ok" {
-		t.Fatalf("unexpected apply state: %s", result.State)
-	}
-	loaded, err := loadSynologyConfig(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !loaded.LastApply.Success || !strings.Contains(loaded.LastApply.Message, "staging") {
-		t.Fatalf("apply message must disclose staging issuance: %+v", loaded.LastApply)
-	}
-	// A staging apply is still a real DSM deployment and must be announced.
-	if len(notified) != 1 || notified[0] != "DNSACMECertDeployed|example.com" {
-		t.Fatalf("apply must announce a DSM deployment, got %v", notified)
 	}
 }
 
