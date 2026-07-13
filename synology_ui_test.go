@@ -118,6 +118,35 @@ func TestSynologyUIButtonTextUsesDSMNativeMetrics(t *testing.T) {
 	}
 }
 
+func TestSynologyUIClampsInitialSizeAndReflowsNestedCards(t *testing.T) {
+	sourceBytes, err := os.ReadFile("synology/spk/ui/DNSACME.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(sourceBytes)
+
+	for _, marker := range []string{
+		"me.fitInitialWindowSize(windowConfig);",
+		"config.width = Math.max(minWidth, Math.min(requestedWidth, maxWidth));",
+		"config.height = Math.max(minHeight, Math.min(requestedHeight, maxHeight));",
+		`this.on("resize", function () { me.reflowWindowLayout.defer(1, me); }, this);`,
+		"if (active && active.doLayout) { active.doLayout(); }",
+	} {
+		if !strings.Contains(source, marker) {
+			t.Fatalf("responsive window sizing is missing %q", marker)
+		}
+	}
+	// The outer window, each card root, and each centered inner card must all
+	// participate in layout. Without these nested layouts a card rendered at the
+	// restored startup width remains clipped after the user enlarges the window.
+	if strings.Count(source, `layout: "fit"`) < 3 {
+		t.Fatal("nested card roots no longer use fit layout")
+	}
+	if strings.Count(source, `layout: "anchor"`) < 2 {
+		t.Fatal("centered cards no longer resize their children")
+	}
+}
+
 func TestSynologyUIReconfigurationStateIsServerBacked(t *testing.T) {
 	sourceBytes, err := os.ReadFile("synology/spk/ui/DNSACME.js")
 	if err != nil {
@@ -162,6 +191,33 @@ func TestSynologyUIOffersOptionalTestAndDirectProductionApply(t *testing.T) {
 		if strings.Contains(source, removed) {
 			t.Fatalf("removed staging gate remains in the UI: %s", removed)
 		}
+	}
+}
+
+func TestSynologyUIApplySuccessUsesReturnedConfigWithoutReload(t *testing.T) {
+	sourceBytes, err := os.ReadFile("synology/spk/ui/DNSACME.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(sourceBytes)
+	start := strings.Index(source, "  finishAction: function (action, data) {")
+	end := strings.Index(source[start:], "\n\n  reconcileActionState:")
+	if start < 0 || end < 0 {
+		t.Fatal("finishAction block not found")
+	}
+	block := source[start : start+end]
+	for _, marker := range []string{
+		"me.setActionsBusy(false);",
+		"me.cfg = data.config;",
+		"me.enterDeployedView(data.config);",
+		"me.loadLogs();",
+	} {
+		if !strings.Contains(block, marker) {
+			t.Fatalf("apply success settlement is missing %q", marker)
+		}
+	}
+	if strings.Contains(block, "me.loadAll()") {
+		t.Fatal("apply success still issues a config reload after the long CGI request")
 	}
 }
 

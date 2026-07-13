@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/url"
@@ -12,6 +13,31 @@ import (
 	"testing"
 	"time"
 )
+
+func TestSynologyNotificationArgsUseSystemNotificationMode(t *testing.T) {
+	args, err := synologyNotificationArgs("DNSACMECertDeployed", map[string]string{"%CERT_DOMAIN%": "example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(args) != 3 || args[0] != "@administrators" || args[1] != "DNSACMECertDeployed" {
+		t.Fatalf("unexpected synodsmnotify arguments: %v", args)
+	}
+	for _, arg := range args {
+		if arg == "-c" || arg == "-t" || arg == "-l" {
+			t.Fatalf("system notification must not mix direct desktop flags: %v", args)
+		}
+	}
+	var payload map[string]string
+	if err := json.Unmarshal([]byte(args[2]), &payload); err != nil {
+		t.Fatalf("invalid notification payload: %v", err)
+	}
+	if payload["%CERT_DOMAIN%"] != "example.com" {
+		t.Fatalf("certificate variable missing from payload: %v", payload)
+	}
+	if payload["DESKTOP_NOTIFY_CLASSNAME"] != synologyNotificationAppID {
+		t.Fatalf("desktop class name missing from payload: %v", payload)
+	}
+}
 
 // The notification templates are embedded in the binary and published to
 // /var/cache/texts/DNSACME once by the root publish-notifications command. Every
@@ -651,6 +677,13 @@ func TestCGIStatusReportsNotificationState(t *testing.T) {
 	}
 	if _, exists := resp["testPassed"]; !exists {
 		t.Fatal("status must expose the optional staging test state")
+	}
+	statusConfig, ok := resp["config"].(SynologyConfig)
+	if !ok {
+		t.Fatalf("status must return a config for apply reconciliation, got %T", resp["config"])
+	}
+	if statusConfig.Synology.Password != "********" {
+		t.Fatal("status reconciliation config must redact the DSM password")
 	}
 	if _, exists := resp["canApply"]; exists {
 		t.Fatal("status must not expose the removed staging apply gate")

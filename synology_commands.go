@@ -279,6 +279,11 @@ func cgiStatus(configPath string) (any, error) {
 		"canRenew":   cfg.CanRenew(),
 		"lastTest":   lastTest,
 		"lastApply":  lastApply,
+		// Long-running apply requests can leave DSM's SCGI gateway unable to serve
+		// the immediately following config request. Return the redacted config with
+		// status so the UI's HTTP-0 reconciliation path can enter the deployed view
+		// without issuing a second request.
+		"config": cfg.Redacted(),
 		// notificationsPublished lets the UI tell "enabled and deliverable" from
 		// "enabled but the catalog is gone" (DSM can drop it), so it can re-surface
 		// the one-time publish command instead of silently dropping notifications.

@@ -378,17 +378,21 @@ func synologyRenewalDeployHook(cfg SynologyConfig, storageDir string) func(conte
 }
 
 // synologyNotificationAppID is this package's DSM application id (it matches
-// dsmappname in synology/spk/INFO). synodsmnotify stamps it as the desktop card's
-// className so DSM can localize the event into a proper notification card; with an
-// empty className the card falls back to rendering the raw JSON payload.
+// dsmappname in synology/spk/INFO). System notifications carry it through the
+// documented DESKTOP_NOTIFY_CLASSNAME custom variable so DSM associates the
+// desktop card with this package.
 const synologyNotificationAppID = "SYNO.SDS.DNSACME.Application"
 
 // synologyNotifyCommand delivers one DSM notification event. It shells out to
-// synodsmnotify rather than bare synonotify: synodsmnotify (setuid root, so the
-// package user may invoke it) stamps the className, tag, and level, which lets DSM
-// render a localized notification card, whereas bare synonotify leaves className
-// empty and the desktop card shows the raw JSON payload. Delivery itself does not
-// need the daemon to run as root. The localized templates are published to
+// synodsmnotify rather than bare synonotify so a recipient group can be selected.
+// This must use the system-notification form exactly:
+//
+//	synodsmnotify <user/group> <mail_string_key> <custom_variables_json>
+//
+// The separate `-c <app_id> <user> <title_i18n> <message_i18n>` form is for direct
+// desktop I18N messages. Mixing its flags with a mail-string event makes DSM treat
+// the JSON variables as the notification subject even though it still expands the
+// body template. Delivery does not need the daemon to run as root. The templates are published to
 // /var/cache/texts/DNSACME once by the root `synology publish-notifications`
 // command, and DSM then localizes the message per user and applies each user's
 // delivery rules (desktop tray, email, mobile push); an event whose catalog is
@@ -398,17 +402,23 @@ const synologyNotificationAppID = "SYNO.SDS.DNSACME.Application"
 // is the tag because DSM treats it as a mail-string key, not literal text.
 // Replaceable for tests.
 var synologyNotifyCommand = func(ctx context.Context, tag string, vars map[string]string) error {
-	payload, err := json.Marshal(vars)
+	args, err := synologyNotificationArgs(tag, vars)
 	if err != nil {
 		return err
 	}
 	runCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	return exec.CommandContext(runCtx, "/usr/syno/bin/synodsmnotify",
-		"-c", synologyNotificationAppID,
-		"-t", tag,
-		"-l", "info",
-		"@administrators", tag, string(payload)).Run()
+	return exec.CommandContext(runCtx, "/usr/syno/bin/synodsmnotify", args...).Run()
+}
+
+func synologyNotificationArgs(tag string, vars map[string]string) ([]string, error) {
+	payloadVars := cloneStringMap(vars)
+	payloadVars["DESKTOP_NOTIFY_CLASSNAME"] = synologyNotificationAppID
+	payload, err := json.Marshal(payloadVars)
+	if err != nil {
+		return nil, err
+	}
+	return []string{"@administrators", tag, string(payload)}, nil
 }
 
 // notifySynologyCertRenewed announces one successful unattended renewal import.

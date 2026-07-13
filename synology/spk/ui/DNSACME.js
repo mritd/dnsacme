@@ -411,6 +411,13 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
       items: [me.mainPanel]
     }, config || {});
 
+    // DSM may restore a window size saved by an older package build, including
+    // dimensions smaller than this UI can render. Ext.Window's minWidth and
+    // minHeight constrain later drag-resizes but do not repair that initial
+    // config, so clamp it before the first layout while still fitting small
+    // browser viewports.
+    me.fitInitialWindowSize(windowConfig);
+
     this.callParent([windowConfig]);
 
     // Persist a dirty step on close as a best effort; callbacks ignore the
@@ -427,10 +434,40 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
     // "resize" (not the window's) guarantees the border layout has already applied
     // the new geometry; the one-tick defer lets the region body settle first.
     me.cards.on("resize", function () { me.fitLogHeight.defer(1, me); }, me);
+    // Ext's nested auto layouts keep the width from their first render. Force a
+    // complete layout pass after an outer window resize so a card initially
+    // rendered in a restored narrow window expands instead of staying clipped.
+    this.on("resize", function () { me.reflowWindowLayout.defer(1, me); }, this);
     // AppWindow can render during callParent. Start immediately in that case;
     // otherwise wait for the one afterrender event that is still pending.
-    var start = function () { me.showStep(0); me.maskMain(SYNO.SDS.DNSACME.t("status.loadingConfig")); me.loadAll(); };
+    var start = function () { me.reflowWindowLayout(); me.showStep(0); me.maskMain(SYNO.SDS.DNSACME.t("status.loadingConfig")); me.loadAll(); };
     if (me.rendered) { start(); } else { me.on("afterrender", start, me, { single: true }); }
+  },
+
+  fitInitialWindowSize: function (config) {
+    var view = Ext.getBody && Ext.getBody().getViewSize ? Ext.getBody().getViewSize() : null;
+    var margin = 32;
+    var maxWidth = view && view.width > 0 ? Math.max(320, view.width - margin) : Number.MAX_VALUE;
+    var maxHeight = view && view.height > 0 ? Math.max(320, view.height - margin) : Number.MAX_VALUE;
+    var minWidth = Math.min(this.minWidth, maxWidth);
+    var minHeight = Math.min(this.minHeight, maxHeight);
+    var requestedWidth = parseInt(config.width, 10) || this.width;
+    var requestedHeight = parseInt(config.height, 10) || this.height;
+
+    config.minWidth = minWidth;
+    config.minHeight = minHeight;
+    config.width = Math.max(minWidth, Math.min(requestedWidth, maxWidth));
+    config.height = Math.max(minHeight, Math.min(requestedHeight, maxHeight));
+  },
+
+  reflowWindowLayout: function () {
+    if (!this.rendered) { return; }
+    if (this.mainPanel && this.mainPanel.rendered) { this.mainPanel.doLayout(); }
+    if (this.cards && this.cards.rendered) { this.cards.doLayout(); }
+    var layout = this.cards && this.cards.getLayout ? this.cards.getLayout() : null;
+    var active = layout && layout.activeItem;
+    if (active && active.doLayout) { active.doLayout(); }
+    this.fitLogHeight.defer(1, this);
   },
 
   STEPS: [
@@ -709,6 +746,8 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
     });
     var card = new Ext.Panel({
       border: false,
+      layout: "anchor",
+      defaults: { anchor: "100%" },
       cls: "dnsacme-content dnsacme-content-form dnsacme-card",
       bodyStyle: "background:transparent;padding:0;",
       items: cfg.title ? [this.cardHead(cfg.title, cfg.subtitle), formInner] : [formInner]
@@ -716,6 +755,7 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
     var form = new Ext.form.FormPanel({
       id: "dnsacme-card-" + id,
       border: false,
+      layout: "fit",
       autoScroll: true,
       bodyStyle: "padding:24px 24px 22px 24px;background:transparent;",
       items: [card]
@@ -732,6 +772,8 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
     // window grows. The log fills the column (shrinking on narrow windows).
     var card = new Ext.Panel({
       border: false,
+      layout: "anchor",
+      defaults: { anchor: "100%" },
       cls: "dnsacme-content dnsacme-card",
       bodyStyle: "background:transparent;padding:0;",
       items: cardItems
@@ -739,6 +781,7 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
     return new Ext.Panel({
       id: "dnsacme-card-" + id,
       border: false,
+      layout: "fit",
       autoScroll: false,
       bodyStyle: "padding:24px 24px 22px 24px;background:transparent;",
       items: [card]
@@ -1362,8 +1405,9 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
   // (directly or via reconcileActionState). A passed test-run records diagnostic
   // state and stays on the final step; Apply was already available independently.
   // DSM's SCGI gateway resets long test-run/apply POSTs and can stall the very
-  // next requests, and a full loadAll there leaves the wizard stuck on "loading
-  // configuration" with both buttons frozen. Apply still reloads the deployed view.
+  // next request. Both successful action responses and the status reconciliation
+  // response carry a redacted config, so settle locally instead of calling
+  // loadAll and leaving the wizard stuck on "loading configuration".
   finishAction: function (action, data) {
     var me = this;
     if (action === "test-run") {
@@ -1377,7 +1421,14 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
       me.showTestSuccessDialog();
       return;
     }
-    me.loadAll();
+    me.setActionsBusy(false);
+    if (!data || !data.config) {
+      me.setStatus(SYNO.SDS.DNSACME.t("status.loadFailed", { error: SYNO.SDS.DNSACME.t("error.invalidResponse") }), true);
+      return;
+    }
+    me.cfg = data.config;
+    me.enterDeployedView(data.config);
+    me.loadLogs();
   },
 
   reconcileActionState: function (action, errorText) {
