@@ -5,6 +5,8 @@ set -eu
 ROOT=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 OUT_ARG=${1:-build}
 OUT=$OUT_ARG
+BUILD_VERSION=${DNSACME_BUILD_VERSION:-$(git -C "$ROOT" rev-parse HEAD)}
+PACKAGE_VERSION=${DNSACME_PACKAGE_VERSION:-}
 
 case "$OUT" in
   /*) ;;
@@ -29,11 +31,17 @@ build_pkg() (
 
   mkdir -p "$work/package/bin" "$work/package/scripts" "$work/package/ui" "$work/conf"
   GOOS=linux GOARCH="$arch" GOAMD64="$goamd64" CGO_ENABLED=0 \
-    go build -trimpath -ldflags "-s -w" -o "$work/package/bin/dnsacme" "$ROOT"
+    go build -trimpath -ldflags "-s -w -X main.commit=${BUILD_VERSION}" -o "$work/package/bin/dnsacme" "$ROOT"
 
   cp -R "$ROOT/synology/spk/conf/." "$work/conf/"
-  sed "s/^arch=.*/arch=\"${dsm_arch}\"/" \
-    "$ROOT/synology/spk/INFO" > "$work/package/INFO"
+  if [ -n "$PACKAGE_VERSION" ]; then
+    sed -e "s/^arch=.*/arch=\"${dsm_arch}\"/" \
+      -e "s/^version=.*/version=\"${PACKAGE_VERSION}\"/" \
+      "$ROOT/synology/spk/INFO" > "$work/package/INFO"
+  else
+    sed "s/^arch=.*/arch=\"${dsm_arch}\"/" \
+      "$ROOT/synology/spk/INFO" > "$work/package/INFO"
+  fi
   cp -R "$ROOT/synology/spk/scripts/." "$work/package/scripts/"
   cp -R "$ROOT/synology/spk/ui/." "$work/package/ui/"
 

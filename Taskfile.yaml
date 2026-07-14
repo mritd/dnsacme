@@ -20,11 +20,11 @@ tasks:
     label: build-{{.TASK}}
     vars:
       DNSACME_COMMIT:
-        sh: git rev-parse HEAD
+        sh: if [ -n "${DNSACME_BUILD_VERSION:-}" ]; then printf '%s\n' "$DNSACME_BUILD_VERSION"; else git rev-parse HEAD; fi
     cmds:
       - task: mkdir
       - |
-        GOOS={{.GOOS}} GOARCH={{.GOARCH}} GOARM={{.GOARM}} GOMIPS={{.GOMIPS}} \
+        GOOS={{.GOOS}} GOARCH={{.GOARCH}} GOARM={{.GOARM}} GOAMD64={{.GOAMD64}} GOMIPS={{.GOMIPS}} \
         go build -trimpath -o build/dnsacme-{{.TASK}} -ldflags \
         "-w -s -X main.commit={{.DNSACME_COMMIT}}" {{.CLI_ARGS}}
 
@@ -160,7 +160,8 @@ tasks:
       - rm -rf build/synology
       - ./synology/build-spk.sh build
 
-  release:
+  release-build:
+    desc: Build all release assets without tagging or publishing
     cmds:
       - task: clean
       - task: linux-386
@@ -173,9 +174,15 @@ tasks:
       - task: linux-arm64
       - task: linux-mips-hardfloat
       - task: linux-mipsle-softfloat
+      - task: linux-mipsle-hardfloat
       - task: linux-mips64
       - task: linux-mips64le
       - task: synology
+
+  release:
+    desc: "Build, tag, push, and publish a GitHub release (usage: task release -- v1.2.3)"
+    cmds:
+      - ./scripts/release.sh {{.CLI_ARGS}}
 
   gofmt:
     cmds:

@@ -114,6 +114,24 @@ Apply is always required before automatic renewal starts for the changed configu
 - Certificate and log data: `/var/packages/dnsacme/var`.
 - Project link: [github.com/mritd/dnsacme](https://github.com/mritd/dnsacme).
 
+#### Publishing a release
+
+The release task requires a `vMAJOR.MINOR.PATCH` semantic version tag. It builds every
+Linux binary and Synology SPK, synchronizes the SPK version with the tag, writes
+`build/SHA256SUMS`, tags the current commit, pushes the tag, creates the GitHub
+Release, and uploads every file from `build`:
+
+```sh
+task release -- v1.2.3
+```
+
+By default the latest commit message becomes the release notes. Automated callers can
+provide AI-generated notes with `--notes-file`, `RELEASE_NOTES_FILE`, or `RELEASE_NOTES`:
+
+```sh
+task release -- v1.2.3 --notes-file /tmp/release.md
+```
+
 ### DNS Config
 
 Currently dnsacme supports 8 DNS providers (theoretically more, and some have not been added yet),

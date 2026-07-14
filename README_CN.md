@@ -107,6 +107,20 @@ sudo /usr/syno/bin/synopkg install dnsacme-synology-amd64.spk
 - 证书和日志数据：`/var/packages/dnsacme/var`。
 - 项目地址：[github.com/mritd/dnsacme](https://github.com/mritd/dnsacme)。
 
+#### 发布新版本
+
+发布任务必须接受 `vMAJOR.MINOR.PATCH` 格式的语义化版本 tag。它会编译所有 Linux 二进制和 Synology SPK，将 SPK 版本与 tag 同步，生成 `build/SHA256SUMS`，为当前 commit 创建并推送 tag，然后创建 GitHub Release 并上传 `build` 中的全部文件：
+
+```sh
+task release -- v1.2.3
+```
+
+默认使用最新 commit message 作为发布说明。自动化或外部 AI 可以通过 `--notes-file`、`RELEASE_NOTES_FILE` 或 `RELEASE_NOTES` 传入文案：
+
+```sh
+task release -- v1.2.3 --notes-file /tmp/release.md
+```
+
 ### DNS 配置
 
 dnsacme 当前支持 8 个 DNS 服务商。理论上还可以支持更多服务商，部分服务商尚未添加。`--dns` 参数支持的服务商可以查看 [consts.go](https://github.com/mritd/dnsacme/blob/main/consts.go) 中的 `DNS_PROVIDER_*` 常量：
