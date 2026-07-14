@@ -132,6 +132,8 @@ provide AI-generated notes with `--notes-file`, `RELEASE_NOTES_FILE`, or `RELEAS
 task release -- v1.2.3 --notes-file /tmp/release.md
 ```
 
+The GitHub Release title defaults to the tag itself, such as `v1.2.3`.
+
 ### DNS Config
 
 Currently dnsacme supports 8 DNS providers (theoretically more, and some have not been added yet),

@@ -14,7 +14,7 @@ Examples:
 Environment:
   RELEASE_NOTES         Release body. Overrides the latest commit message.
   RELEASE_NOTES_FILE    File containing the release body.
-  RELEASE_TITLE         Release title. Defaults to '<tag> - <commit subject>'.
+  RELEASE_TITLE         Release title. Defaults to the release tag.
   RELEASE_REMOTE        Git remote to tag and publish. Defaults to origin.
 EOF
 }
@@ -89,8 +89,7 @@ remote=${RELEASE_REMOTE:-origin}
 git remote get-url "$remote" >/dev/null 2>&1 || die "git remote not found: $remote"
 
 commit=$(git rev-parse HEAD)
-subject=$(git log -1 --format=%s)
-title=${RELEASE_TITLE:-"$tag - $subject"}
+title=${RELEASE_TITLE:-$tag}
 
 local_commit=$(git rev-list -n 1 "$tag" 2>/dev/null || true)
 if [[ -n "$local_commit" && "$local_commit" != "$commit" ]]; then
