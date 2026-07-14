@@ -31,7 +31,7 @@ build_pkg() (
 
   mkdir -p "$work/package/bin" "$work/package/scripts" "$work/package/ui" "$work/conf"
   GOOS=linux GOARCH="$arch" GOAMD64="$goamd64" CGO_ENABLED=0 \
-    go build -trimpath -ldflags "-s -w -X main.commit=${BUILD_VERSION}" -o "$work/package/bin/dnsacme" "$ROOT"
+    go build -tags synology -trimpath -ldflags "-s -w -X main.commit=${BUILD_VERSION}" -o "$work/package/bin/dnsacme" "$ROOT"
 
   cp -R "$ROOT/synology/spk/conf/." "$work/conf/"
   if [ -n "$PACKAGE_VERSION" ]; then

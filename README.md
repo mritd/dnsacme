@@ -134,6 +134,15 @@ task release -- v1.2.3 --notes-file /tmp/release.md
 
 The GitHub Release title defaults to the tag itself, such as `v1.2.3`.
 
+Regular builds exclude Synology DSM support. Enable it explicitly when building a
+DSM-capable binary:
+
+```sh
+go build -tags synology
+```
+
+`task synology` enables this tag automatically when producing SPK packages.
+
 ### DNS Config
 
 Currently dnsacme supports 8 DNS providers (theoretically more, and some have not been added yet),

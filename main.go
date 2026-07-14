@@ -76,8 +76,6 @@ func init() {
 
 	rootCmd.Flags().SortFlags = false
 	rootCmd.PersistentFlags().SortFlags = false
-	rootCmd.AddCommand(newSynologyCommand())
-
 	bindConfigSources()
 
 }

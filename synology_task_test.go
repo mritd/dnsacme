@@ -1,3 +1,5 @@
+//go:build synology
+
 package main
 
 import (

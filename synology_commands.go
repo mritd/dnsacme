@@ -1,3 +1,5 @@
+//go:build synology
+
 package main
 
 import (
@@ -15,6 +17,10 @@ import (
 
 	"github.com/spf13/cobra"
 )
+
+func init() {
+	rootCmd.AddCommand(newSynologyCommand())
+}
 
 // newSynologyCommand groups package lifecycle commands and the DSM CGI entry
 // point without changing the normal standalone CLI workflow.

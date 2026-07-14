@@ -123,6 +123,14 @@ task release -- v1.2.3 --notes-file /tmp/release.md
 
 GitHub Release 标题默认只使用 tag 本身，例如 `v1.2.3`。
 
+普通构建默认排除 Synology DSM 支持。如需编译包含 DSM 功能的二进制，请显式启用 build tag：
+
+```sh
+go build -tags synology
+```
+
+`task synology` 在生成 SPK 套件时会自动启用该 tag。
+
 ### DNS 配置
 
 dnsacme 当前支持 8 个 DNS 服务商。理论上还可以支持更多服务商，部分服务商尚未添加。`--dns` 参数支持的服务商可以查看 [consts.go](https://github.com/mritd/dnsacme/blob/main/consts.go) 中的 `DNS_PROVIDER_*` 常量：
