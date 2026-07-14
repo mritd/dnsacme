@@ -60,20 +60,6 @@ func newSynologyCommand() *cobra.Command {
 			return serveSynologyCGI(cmd.Context(), configFile, os.Getenv, os.Stdin, os.Stdout)
 		},
 	})
-	publishCmd := &cobra.Command{
-		Use:   "publish-notifications",
-		Short: "Publish DSM notification templates so the package can deliver notifications",
-		Long: "Publish the localized DSM notification catalog and register its events, then enable " +
-			"notifications. DSM stores the catalog in a root-owned directory, so this is the one place " +
-			"the package needs root; run it once over SSH:\n\n  " + synologyPublishCommand + "\n\n" +
-			"Use --disable to remove the catalog and turn notifications off.",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			disable, _ := cmd.Flags().GetBool("disable")
-			return runSynologyPublishNotifications(configFile, disable)
-		},
-	}
-	publishCmd.Flags().Bool("disable", false, "Remove the notification catalog and disable notifications")
-	cmd.AddCommand(publishCmd)
 	return cmd
 }
 
@@ -109,13 +95,6 @@ func serveSynologyCGI(ctx context.Context, configPath string, getenv cgiEnv, inp
 		payload, err = cgiConfig(method, configPath, input)
 	case "reconfigure":
 		payload, err = cgiReconfigure(method, configPath)
-	case "notifications":
-		if method != http.MethodPost {
-			status = http.StatusMethodNotAllowed
-			err = fmt.Errorf("method %s is not allowed", method)
-			break
-		}
-		payload, err = cgiNotifications(configPath, input)
 	case "metadata":
 		payload = map[string]any{"providers": providerMetadata()}
 	case "status":
@@ -172,10 +151,6 @@ func cgiConfig(method, configPath string, input io.Reader) (any, error) {
 	// Reconfiguration mode is controlled by its dedicated CGI action. Normal form
 	// saves must preserve it until a production apply completes successfully.
 	next.Reconfiguring = current.Reconfiguring
-	// Notifications are owned by their dedicated action (which also performs the
-	// root check and catalog publish). A normal form save must never toggle them.
-	next.NotificationsEnabled = current.NotificationsEnabled
-	next.NotificationCatalogRegistered = current.NotificationCatalogRegistered
 	// The UI only receives redacted values. A mask sentinel or an unchanged empty
 	// secret means "keep the persisted value" rather than erase credentials.
 	next = mergeSecrets(next, current)
@@ -214,57 +189,6 @@ func cgiReconfigure(method, configPath string) (any, error) {
 	return synologyConfigResponse(cfg, configPath), nil
 }
 
-// cgiNotifications is the dedicated toggle for DSM system notifications. It always
-// runs as the package user and never publishes (that needs root and is done once by
-// the publish-notifications command). Enabling only succeeds when the catalog is
-// already published; before then it returns needsPublish so the UI shows the
-// one-time command instead of persisting a setting that could never deliver.
-// Because the published catalog is persistent, a later enable/disable is a plain
-// config flip that needs no root.
-func cgiNotifications(configPath string, input io.Reader) (any, error) {
-	var req struct {
-		Enabled bool `json:"enabled"`
-	}
-	if err := json.NewDecoder(input).Decode(&req); err != nil {
-		return nil, err
-	}
-	cfg, err := loadSynologyConfig(configPath)
-	if err != nil {
-		return nil, err
-	}
-	cfg = normalizeSynologyConfig(cfg)
-	if !req.Enabled {
-		// Disabling is a config flip: the send gate stops delivery immediately. The
-		// catalog is left in place (removing it needs root) so re-enabling is cheap.
-		cfg.NotificationsEnabled = false
-		if err := saveSynologyConfig(configPath, cfg); err != nil {
-			return nil, err
-		}
-		return synologyNotificationResponse(cfg), nil
-	}
-	if !synologyNotificationCatalogReady(cfg) {
-		// The one-time publish has not run yet (or DSM dropped the catalog). Do not
-		// persist an enabled state that cannot deliver; the UI shows the command.
-		return map[string]any{"enabled": false, "needsPublish": true}, nil
-	}
-	cfg.NotificationsEnabled = true
-	if err := saveSynologyConfig(configPath, cfg); err != nil {
-		return nil, err
-	}
-	return synologyNotificationResponse(cfg), nil
-}
-
-// synologyNotificationResponse is the settled-state reply the UI checkbox follows
-// after an enable/disable action. needsPublish is always false here: the only path
-// that needs the one-time publish is an enable before the catalog exists, which
-// returns before reaching this.
-func synologyNotificationResponse(cfg SynologyConfig) map[string]any {
-	return map[string]any{
-		"enabled":      cfg.NotificationsEnabled,
-		"needsPublish": false,
-	}
-}
-
 func cgiStatus(configPath string) (any, error) {
 	cfg, err := loadSynologyConfig(configPath)
 	if err != nil {
@@ -284,11 +208,6 @@ func cgiStatus(configPath string) (any, error) {
 		// status so the UI's HTTP-0 reconciliation path can enter the deployed view
 		// without issuing a second request.
 		"config": cfg.Redacted(),
-		// notificationsPublished lets the UI tell "enabled and deliverable" from
-		// "enabled but the catalog is gone" (DSM can drop it), so it can re-surface
-		// the one-time publish command instead of silently dropping notifications.
-		"notificationsEnabled":   cfg.NotificationsEnabled,
-		"notificationsPublished": synologyNotificationCatalogReady(cfg),
 	}, nil
 }
 
@@ -359,13 +278,8 @@ func synologyConfigResponse(cfg SynologyConfig, configPath string) map[string]an
 		"config":     cfg.Redacted(),
 		"testPassed": cfg.TestPassed(),
 		"canRenew":   cfg.CanRenew(),
-		// notificationsPublished lets the ordinary page load distinguish "enabled and
-		// deliverable" from "enabled but the catalog is gone", so the UI can warn and
-		// point at the one-time publish command instead of showing a silently dead
-		// checkbox. The config response is what applyConfig reads on load.
-		"notificationsPublished": synologyNotificationCatalogReady(cfg),
-		"persisted":              synologyConfigPersisted(configPath),
-		"detected":               detectSynologyEndpoint(nginxConfPath()),
+		"persisted":  synologyConfigPersisted(configPath),
+		"detected":   detectSynologyEndpoint(nginxConfPath()),
 	}
 }
 

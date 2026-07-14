@@ -12,7 +12,6 @@ import (
 	"encoding/pem"
 	"errors"
 	"io"
-	"math"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -569,6 +568,24 @@ func TestSynologyCommandExecutesApplyAPICGIAndDaemonError(t *testing.T) {
 	}
 }
 
+func TestSynologyRemovedOptionsAreNotExposed(t *testing.T) {
+	for _, child := range newSynologyCommand().Commands() {
+		if strings.Contains(child.Name(), "notification") {
+			t.Fatalf("removed notification command is still exposed: %s", child.Name())
+		}
+	}
+	data, err := json.Marshal(defaultSynologyConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "notification") {
+		t.Fatalf("removed notification state is still persisted: %s", data)
+	}
+	if strings.Contains(string(data), "renewalWindowRatio") {
+		t.Fatalf("removed renewal-window override is still persisted: %s", data)
+	}
+}
+
 func TestRunSynologyTestAndApply(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")
@@ -580,9 +597,6 @@ func TestRunSynologyTestAndApply(t *testing.T) {
 	cfg.Synology.Host = host
 	cfg.Synology.Port = atoiForTest(port)
 	cfg.Reconfiguring = true
-	cfg.NotificationsEnabled = true
-	markSynologyNotificationCatalogRegistered(&cfg)
-	stubSynologyNotificationsPublished(t)
 	if err := saveSynologyConfig(path, cfg); err != nil {
 		t.Fatal(err)
 	}
@@ -592,14 +606,6 @@ func TestRunSynologyTestAndApply(t *testing.T) {
 		return nil
 	}
 	defer func() { manageCertificates = oldManage }()
-
-	oldNotify := synologyNotifyCommand
-	var deployNotices []string
-	synologyNotifyCommand = func(ctx context.Context, tag string, vars map[string]string) error {
-		deployNotices = append(deployNotices, tag)
-		return nil
-	}
-	defer func() { synologyNotifyCommand = oldNotify }()
 
 	result, err := runSynologyTest(context.Background(), path)
 	if err != nil {
@@ -638,11 +644,6 @@ func TestRunSynologyTestAndApply(t *testing.T) {
 	}
 	if loaded.Reconfiguring {
 		t.Fatal("successful apply must leave reconfiguration mode")
-	}
-	// test-run does not deploy; only the apply is a real DSM deployment, so exactly
-	// one deployment notification must fire, and it must be the deploy event.
-	if len(deployNotices) != 1 || deployNotices[0] != "DNSACMECertDeployed" {
-		t.Fatalf("production apply must announce a DSM deployment, got %v", deployNotices)
 	}
 }
 
@@ -953,7 +954,7 @@ func TestMonitorSynologyConfigChange(t *testing.T) {
 	if err := saveSynologyConfig(path, cfg); err != nil {
 		t.Fatal(err)
 	}
-	activeHash := renewalReloadKey(cfg)
+	activeHash := cfg.ConfigHash()
 
 	oldRetry := synologyDaemonRetryInterval
 	synologyDaemonRetryInterval = time.Millisecond
@@ -979,109 +980,8 @@ func TestMonitorSynologyConfigChange(t *testing.T) {
 	}
 	ctx, cancel = context.WithTimeout(context.Background(), 3*time.Millisecond)
 	defer cancel()
-	if monitorSynologyConfigChange(ctx, path, renewalReloadKey(unchanged)) {
+	if monitorSynologyConfigChange(ctx, path, unchanged.ConfigHash()) {
 		t.Fatal("unchanged renewable config should wait until context cancellation")
-	}
-
-	// The ratio lives outside ConfigHash, so CanRenew stays true; only the reload
-	// key may notice a window change and restart the manager.
-	ratioOnly := unchanged
-	ratioOnly.RenewalWindowRatio = 0.9
-	if err := saveSynologyConfig(path, ratioOnly); err != nil {
-		t.Fatal(err)
-	}
-	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
-	defer cancel()
-	if !monitorSynologyConfigChange(ctx, path, renewalReloadKey(unchanged)) {
-		t.Fatal("expected renewal-window-only change to trigger daemon reload")
-	}
-}
-
-func TestRenewalWindowRatioTunesRenewalWithoutInvalidatingState(t *testing.T) {
-	dir := t.TempDir()
-	cfg := validSynologyConfig(dir)
-	hash := cfg.ConfigHash()
-	cfg.LastTest = SynologyOperationState{Success: true, At: time.Now(), ConfigHash: hash}
-	cfg.LastApply = SynologyOperationState{Success: true, At: time.Now(), ConfigHash: hash}
-
-	cfg.RenewalWindowRatio = 0.99
-	if cfg.ConfigHash() != hash {
-		t.Fatal("renewal window ratio must stay outside the config hash")
-	}
-	if !cfg.TestPassed() || !cfg.CanRenew() {
-		t.Fatal("tuning the renewal window must not invalidate test/apply state")
-	}
-	if got := cfg.RuntimeConfig(false).RenewalWindowRatio; got != 0.99 {
-		t.Fatalf("production runtime did not receive the ratio: %v", got)
-	}
-	if got := cfg.RuntimeConfig(true).RenewalWindowRatio; got != 0.99 {
-		t.Fatalf("staging runtime did not receive the ratio: %v", got)
-	}
-	base := cfg
-	base.RenewalWindowRatio = 0
-	if renewalReloadKey(cfg) == renewalReloadKey(base) {
-		t.Fatal("reload key must change when the ratio changes")
-	}
-
-	path := filepath.Join(dir, "config.yaml")
-	if err := saveSynologyConfig(path, cfg); err != nil {
-		t.Fatal(err)
-	}
-	loaded, err := loadSynologyConfig(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if loaded.RenewalWindowRatio != 0.99 {
-		t.Fatalf("ratio did not survive the YAML round-trip: %v", loaded.RenewalWindowRatio)
-	}
-}
-
-func TestNormalizeSynologyConfigZeroesOutOfRangeRenewalWindowRatio(t *testing.T) {
-	for _, ratio := range []float64{-0.5, 1.5, 1e308, math.NaN()} {
-		cfg := validSynologyConfig(t.TempDir())
-		cfg.RenewalWindowRatio = ratio
-		if got := normalizeSynologyConfig(cfg).RenewalWindowRatio; got != 0 {
-			t.Fatalf("out-of-range ratio %v was not normalized to unset: %v", ratio, got)
-		}
-	}
-	cfg := validSynologyConfig(t.TempDir())
-	cfg.RenewalWindowRatio = 0.9993
-	if got := normalizeSynologyConfig(cfg).RenewalWindowRatio; got != 0.9993 {
-		t.Fatalf("in-range ratio was altered: %v", got)
-	}
-}
-
-func TestCGIConfigPersistsRenewalWindowRatioWithoutResettingState(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "config.yaml")
-	cfg := validSynologyConfig(dir)
-	hash := cfg.ConfigHash()
-	cfg.LastTest = SynologyOperationState{Success: true, At: time.Now(), ConfigHash: hash}
-	cfg.LastApply = SynologyOperationState{Success: true, At: time.Now(), ConfigHash: hash}
-	if err := saveSynologyConfig(path, cfg); err != nil {
-		t.Fatal(err)
-	}
-
-	// The browser edits the redacted view; mergeSecrets restores credentials so a
-	// ratio-only save must hash identically and keep the operation state.
-	next := cfg.Redacted()
-	next.RenewalWindowRatio = 0.99
-	body, err := json.Marshal(next)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := cgiConfig(http.MethodPost, path, bytes.NewReader(body)); err != nil {
-		t.Fatal(err)
-	}
-	loaded, err := loadSynologyConfig(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if loaded.RenewalWindowRatio != 0.99 {
-		t.Fatalf("CGI save did not persist the ratio: %v", loaded.RenewalWindowRatio)
-	}
-	if !loaded.CanRenew() || !loaded.TestPassed() {
-		t.Fatal("a renewal-window-only save must keep test/apply state")
 	}
 }
 
@@ -1104,9 +1004,6 @@ func TestRunSynologyDaemonDeploysRenewedCertificate(t *testing.T) {
 	cfg.Synology.Port = atoiForTest(port)
 	cfg.LastTest = SynologyOperationState{Success: true, At: time.Now(), ConfigHash: cfg.ConfigHash()}
 	cfg.LastApply = SynologyOperationState{Success: true, At: time.Now(), ConfigHash: cfg.ConfigHash()}
-	cfg.NotificationsEnabled = true
-	markSynologyNotificationCatalogRegistered(&cfg)
-	stubSynologyNotificationsPublished(t)
 	if err := saveSynologyConfig(path, cfg); err != nil {
 		t.Fatal(err)
 	}
@@ -1114,12 +1011,6 @@ func TestRunSynologyDaemonDeploysRenewedCertificate(t *testing.T) {
 
 	oldManage := manageCertificates
 	oldReload := waitForSynologyConfigChange
-	oldNotify := synologyNotifyCommand
-	var notified []string
-	synologyNotifyCommand = func(ctx context.Context, tag string, vars map[string]string) error {
-		notified = append(notified, tag+"|"+vars["%CERT_DOMAIN%"])
-		return nil
-	}
 	manageCertificates = func(ctx context.Context, cfg *certmagic.Config, domains []string) error {
 		if cfg.OnEvent == nil {
 			t.Fatal("expected renewal event hook")
@@ -1130,7 +1021,6 @@ func TestRunSynologyDaemonDeploysRenewedCertificate(t *testing.T) {
 	defer func() {
 		manageCertificates = oldManage
 		waitForSynologyConfigChange = oldReload
-		synologyNotifyCommand = oldNotify
 	}()
 
 	if err := runSynologyDaemon(context.Background(), path); err != nil {
@@ -1138,9 +1028,6 @@ func TestRunSynologyDaemonDeploysRenewedCertificate(t *testing.T) {
 	}
 	if imports != 1 {
 		t.Fatalf("expected one DSM import after renewal event, got %d", imports)
-	}
-	if len(notified) != 1 || notified[0] != "DNSACMECertRenewed|example.com" {
-		t.Fatalf("expected one renewal notification for example.com, got %v", notified)
 	}
 }
 

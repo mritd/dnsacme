@@ -6,12 +6,10 @@ import (
 	"crypto/ed25519"
 	"crypto/rsa"
 	"crypto/x509"
-	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -182,9 +180,6 @@ func runSynologyApply(ctx context.Context, configPath string) (synologyTaskResul
 	if err := saveSynologyConfig(configPath, cfg); err != nil {
 		return synologyTaskResult{}, err
 	}
-	// A successful apply is a real DSM deployment, so announce it the same way the
-	// daemon announces a renewal. This covers the first apply and every re-apply.
-	notifySynologyCertDeployed(ctx, cfg, cfg.ACME.Domains[0])
 	return newSynologyTaskResult(cfg, "ok"), nil
 }
 
@@ -209,13 +204,6 @@ func runSynologyDaemon(ctx context.Context, configPath string) error {
 		daemonCfg = defaultSynologyConfig()
 	}
 	configureSynologyLog(daemonCfg)
-	// Check the published notification catalog against the persisted toggle once at
-	// startup and log guidance if notifications are enabled but the catalog is gone
-	// (DSM can drop it when it rebuilds its notification database). The daemon always
-	// runs as the package user and cannot republish, so this only logs; it runs
-	// independently of the renewal gate because notifications do not depend on a
-	// deployed certificate.
-	reconcileSynologyNotifications(configPath)
 	for {
 		cfg, err := loadSynologyConfig(configPath)
 		if err != nil {
@@ -244,9 +232,7 @@ func runSynologyDaemon(ctx context.Context, configPath string) error {
 			continue
 		}
 
-		// Log the effective ratio (after the env override) and production mode so a
-		// manual renewal test can confirm which window and CA the manager uses.
-		appendSynologyLog(cfg, fmt.Sprintf("starting renewal daemon (renewal window ratio %.4g, CA production)", resolveRenewalWindowRatio(runtime.RenewalWindowRatio)))
+		appendSynologyLog(cfg, "starting renewal daemon (CA production)")
 		// The hook must resolve certificates from the runtime the manager actually
 		// uses, never a hardcoded storage path, or a renewed certificate might not
 		// be found for DSM import.
@@ -265,7 +251,7 @@ func runSynologyDaemon(ctx context.Context, configPath string) error {
 			continue
 		}
 		appendSynologyLog(cfg, "renewal daemon running")
-		changed := waitForSynologyConfigChange(ctx, configPath, renewalReloadKey(cfg))
+		changed := waitForSynologyConfigChange(ctx, configPath, cfg.ConfigHash())
 		cancelManager()
 		stop()
 		if !changed {
@@ -276,9 +262,8 @@ func runSynologyDaemon(ctx context.Context, configPath string) error {
 }
 
 // monitorSynologyConfigChange returns true only for a successfully read config
-// whose renewal reload key (normalized hash plus renewal window) or renewal gate
-// differs. Transient read errors leave the active manager running and are
-// retried on the next interval.
+// whose normalized configuration hash or renewal gate differs. Transient read
+// errors leave the active manager running and are retried on the next interval.
 func monitorSynologyConfigChange(ctx context.Context, configPath, activeKey string) bool {
 	ticker := time.NewTicker(synologyDaemonRetryInterval)
 	defer ticker.Stop()
@@ -292,7 +277,7 @@ func monitorSynologyConfigChange(ctx context.Context, configPath, activeKey stri
 				continue
 			}
 			cfg = normalizeSynologyConfig(cfg)
-			if renewalReloadKey(cfg) != activeKey || !cfg.CanRenew() {
+			if cfg.ConfigHash() != activeKey || !cfg.CanRenew() {
 				return true
 			}
 		}
@@ -345,8 +330,7 @@ func validateConfigForSynology(cfg SynologyConfig, requireDeploy bool) error {
 
 // synologyRenewalDeployHook imports only completed certificate events. A
 // cert_obtained event is also emitted when a manager starts with empty storage,
-// so use its renewal field to distinguish a real renewal from an initial obtain;
-// both must be deployed, but only a real renewal gets the renewal notification.
+// both an initial obtain and a real renewal must be deployed.
 // Import errors are logged and returned, but CertMagic treats cert_obtained as a
 // post event and may already have committed certificate storage when deployment
 // fails.
@@ -367,84 +351,7 @@ func synologyRenewalDeployHook(cfg SynologyConfig, storageDir string) func(conte
 		if err := deploySynologyStoredCertificate(ctx, cfg, identifier, keyPath, certPath); err != nil {
 			return err
 		}
-		renewal, _ := data["renewal"].(bool)
-		if renewal {
-			notifySynologyCertRenewed(ctx, cfg, identifier)
-		} else {
-			notifySynologyCertDeployed(ctx, cfg, identifier)
-		}
 		return nil
-	}
-}
-
-// synologyNotificationAppID is this package's DSM application id (it matches
-// dsmappname in synology/spk/INFO). System notifications carry it through the
-// documented DESKTOP_NOTIFY_CLASSNAME custom variable so DSM associates the
-// desktop card with this package.
-const synologyNotificationAppID = "SYNO.SDS.DNSACME.Application"
-
-// synologyNotifyCommand delivers one DSM notification event. It shells out to
-// synodsmnotify rather than bare synonotify so a recipient group can be selected.
-// This must use the system-notification form exactly:
-//
-//	synodsmnotify <user/group> <mail_string_key> <custom_variables_json>
-//
-// The separate `-c <app_id> <user> <title_i18n> <message_i18n>` form is for direct
-// desktop I18N messages. Mixing its flags with a mail-string event makes DSM treat
-// the JSON variables as the notification subject even though it still expands the
-// body template. Delivery does not need the daemon to run as root. The templates are published to
-// /var/cache/texts/DNSACME once by the root `synology publish-notifications`
-// command, and DSM then localizes the message per user and applies each user's
-// delivery rules (desktop tray, email, mobile push); an event whose catalog is
-// absent is silently dropped, which is why callers gate on
-// synologyNotificationsDeliverable. The recipient is @administrators so every DSM
-// admin receives it (a group target fans out to all members). The title argument
-// is the tag because DSM treats it as a mail-string key, not literal text.
-// Replaceable for tests.
-var synologyNotifyCommand = func(ctx context.Context, tag string, vars map[string]string) error {
-	args, err := synologyNotificationArgs(tag, vars)
-	if err != nil {
-		return err
-	}
-	runCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	return exec.CommandContext(runCtx, "/usr/syno/bin/synodsmnotify", args...).Run()
-}
-
-func synologyNotificationArgs(tag string, vars map[string]string) ([]string, error) {
-	payloadVars := cloneStringMap(vars)
-	payloadVars["DESKTOP_NOTIFY_CLASSNAME"] = synologyNotificationAppID
-	payload, err := json.Marshal(payloadVars)
-	if err != nil {
-		return nil, err
-	}
-	return []string{"@administrators", tag, string(payload)}, nil
-}
-
-// notifySynologyCertRenewed announces one successful unattended renewal import.
-// Dispatch problems only log: a missed notification must never fail a renewal
-// that has already been deployed into DSM.
-func notifySynologyCertRenewed(ctx context.Context, cfg SynologyConfig, identifier string) {
-	if !synologyNotificationsDeliverable(cfg) {
-		return
-	}
-	if err := synologyNotifyCommand(ctx, "DNSACMECertRenewed", map[string]string{"%CERT_DOMAIN%": identifier}); err != nil {
-		appendSynologyLog(cfg, "DSM renewal notification failed: "+err.Error())
-	}
-}
-
-// notifySynologyCertDeployed announces one successful apply that imported a
-// certificate into DSM (the first apply, or any manual re-apply). It uses a
-// distinct event from the unattended renewal notice so a user's notification
-// rules can tell an interactive deployment from a background renewal. Like the
-// renewal notice, dispatch problems only log so a missed notification can never
-// fail an apply that already reached DSM.
-func notifySynologyCertDeployed(ctx context.Context, cfg SynologyConfig, identifier string) {
-	if !synologyNotificationsDeliverable(cfg) {
-		return
-	}
-	if err := synologyNotifyCommand(ctx, "DNSACMECertDeployed", map[string]string{"%CERT_DOMAIN%": identifier}); err != nil {
-		appendSynologyLog(cfg, "DSM deployment notification failed: "+err.Error())
 	}
 }
 

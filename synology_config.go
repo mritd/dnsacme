@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -25,9 +24,9 @@ var chownFile = os.Chown
 // keeps the target's original uid/gid and a root-run writer does not strip the
 // non-root package user's access to a file it later reads. When ref does not exist
 // yet (a first write), it falls back to the owner of ref's containing directory:
-// the one-time publish-notifications command runs as root and can create config for
-// the first time, and a root-owned config would lock the unprivileged package
-// daemon out; inheriting the package-owned etc directory keeps it readable. Best
+// a root-run maintenance command can create config for the first time, and a
+// root-owned config would lock the unprivileged package daemon out; inheriting the
+// package-owned etc directory keeps it readable. Best
 // effort: a same-owner chown is a no-op, and any failure leaves the write intact.
 func preserveFileOwnership(dst, ref string) {
 	info, err := os.Stat(ref)
@@ -52,40 +51,13 @@ const (
 // SynologyConfig is the persisted package configuration and operation state.
 // It contains secrets and must only be exposed through Redacted.
 type SynologyConfig struct {
-	ACME     SynologyACMEConfig    `json:"acme" yaml:"acme"`
-	DNS      SynologyDNSConfig     `json:"dns" yaml:"dns"`
-	Synology SynologyDeployConfig  `json:"synology" yaml:"synology"`
-	Runtime  SynologyRuntimeConfig `json:"runtime" yaml:"runtime"`
-	// RenewalWindowRatio tunes how early background renewal fires (remaining:total
-	// lifetime, 0 = CertMagic default 1/3). It is deliberately a top-level field so
-	// it stays outside ConfigHash: changing only the window must not invalidate the
-	// current test and apply results the way certificate-identity inputs do. The
-	// daemon still reloads on change through renewalReloadKey.
-	RenewalWindowRatio float64 `json:"renewalWindowRatio,omitempty" yaml:"renewalWindowRatio,omitempty"`
-	// NotificationsEnabled turns DSM system notifications for certificate deploy and
-	// renewal events on. Publishing the localized text catalog into the root-owned
-	// /var/cache/texts needs root, but only once: the user runs a one-time
-	// `synology publish-notifications` command over SSH (the daemon and CGI always
-	// run as the package user), which publishes the catalog and sets this flag. Once
-	// published the catalog is persistent, so later toggles are plain non-root config
-	// flips. It is top-level and kept out of ConfigHash (it never affects certificate
-	// issuance or the test/apply results) but folded into renewalReloadKey so a
-	// toggle reloads the daemon and its renewal deploy hook observes the change
-	// instead of sending with a stale captured value. The reload is driven by a poll,
-	// so a renewal landing within one poll interval of the toggle can still miss
-	// (enable) or rely on the live present() check (disable); the worst case is a
-	// single skipped notification, never a wrong-state send.
-	NotificationsEnabled bool `json:"notificationsEnabled,omitempty" yaml:"notificationsEnabled,omitempty"`
-	// NotificationCatalogRegistered records that publish-notifications registered
-	// the catalog during this package installation. DSM keeps the global catalog
-	// across uninstall, but a new browser session may have cached notification
-	// strings before the package was reinstalled. Re-registering emits DSM's string
-	// refresh event; a fresh config therefore requires one publish even when the
-	// preserved catalog bytes already match.
-	NotificationCatalogRegistered bool                   `json:"notificationCatalogRegistered,omitempty" yaml:"notificationCatalogRegistered,omitempty"`
-	Reconfiguring                 bool                   `json:"reconfiguring,omitempty" yaml:"reconfiguring,omitempty"`
-	LastTest                      SynologyOperationState `json:"lastTest,omitempty" yaml:"lastTest,omitempty"`
-	LastApply                     SynologyOperationState `json:"lastApply,omitempty" yaml:"lastApply,omitempty"`
+	ACME          SynologyACMEConfig     `json:"acme" yaml:"acme"`
+	DNS           SynologyDNSConfig      `json:"dns" yaml:"dns"`
+	Synology      SynologyDeployConfig   `json:"synology" yaml:"synology"`
+	Runtime       SynologyRuntimeConfig  `json:"runtime" yaml:"runtime"`
+	Reconfiguring bool                   `json:"reconfiguring,omitempty" yaml:"reconfiguring,omitempty"`
+	LastTest      SynologyOperationState `json:"lastTest,omitempty" yaml:"lastTest,omitempty"`
+	LastApply     SynologyOperationState `json:"lastApply,omitempty" yaml:"lastApply,omitempty"`
 }
 
 // SynologyACMEConfig contains certificate request inputs owned by the wizard.
@@ -240,11 +212,9 @@ func saveSynologyConfig(path string, cfg SynologyConfig) error {
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	// Keep the config owned by whoever owned it before this write. The notifications
-	// action publishes as root and therefore saves config as root; without this a
-	// root-written config becomes root:root 0600 and the non-root package daemon
-	// (the default run-as, and what an upgrade resets to) can no longer read its own
-	// config. Preserving the existing owner keeps a root writer from locking it out.
+	// Keep the config owned by whoever owned it before this write. Without this a
+	// root-run maintenance write can make the file root:root 0600, leaving the
+	// non-root package daemon unable to read its own config.
 	preserveFileOwnership(tmpName, path)
 	return os.Rename(tmpName, path)
 }
@@ -290,14 +260,6 @@ func normalizeSynologyConfig(cfg SynologyConfig) SynologyConfig {
 	if cfg.Runtime.LogPath == "" {
 		cfg.Runtime.LogPath = def.Runtime.LogPath
 	}
-	// An out-of-range ratio (hand-edited YAML or a raw CGI post) is normalized to
-	// "unset" so persisted config, the UI, the reload key, and the daemon all agree
-	// on the effective default instead of silently diverging. The negated range
-	// form also catches NaN (every NaN comparison is false), which would otherwise
-	// poison the JSON marshaling of config responses.
-	if !(cfg.RenewalWindowRatio >= 0 && cfg.RenewalWindowRatio <= 1) {
-		cfg.RenewalWindowRatio = 0
-	}
 	return cfg
 }
 
@@ -335,13 +297,12 @@ func normalizeDomains(domains []string) []string {
 func (cfg SynologyConfig) RuntimeConfig(staging bool) Config {
 	cfg = normalizeSynologyConfig(cfg)
 	runtime := Config{
-		Domains:            append([]string(nil), cfg.ACME.Domains...),
-		Email:              cfg.ACME.Email,
-		KeyType:            cfg.ACME.KeyType,
-		DNSProvider:        cfg.DNS.Provider,
-		DNSConfig:          cloneStringMap(cfg.DNS.Config),
-		ZeroSSLCA:          strings.EqualFold(cfg.ACME.CA, "zerossl"),
-		RenewalWindowRatio: cfg.RenewalWindowRatio,
+		Domains:     append([]string(nil), cfg.ACME.Domains...),
+		Email:       cfg.ACME.Email,
+		KeyType:     cfg.ACME.KeyType,
+		DNSProvider: cfg.DNS.Provider,
+		DNSConfig:   cloneStringMap(cfg.DNS.Config),
+		ZeroSSLCA:   strings.EqualFold(cfg.ACME.CA, "zerossl"),
 	}
 	// Staging always uses its own storage root so its untrusted certificate can
 	// never be confused with the production one by the suffix-matching certificate
@@ -392,20 +353,6 @@ func (cfg SynologyConfig) ConfigHash() string {
 	data, _ := json.Marshal(shape)
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
-}
-
-// renewalReloadKey fingerprints everything the renewal daemon must restart to
-// apply. RenewalWindowRatio sits outside ConfigHash on purpose (tuning it must
-// not invalidate test/apply results), but the running CertMagic manager bakes
-// the ratio in at start, so ratio changes still have to trigger a reload.
-// NotificationsEnabled is likewise outside ConfigHash, but the daemon captures it
-// in the renewal deploy hook's cfg, so a toggle must reload the daemon or an
-// already-running hook would keep sending (or suppressing) with stale intent.
-func renewalReloadKey(cfg SynologyConfig) string {
-	return cfg.ConfigHash() +
-		"|ratio=" + strconv.FormatFloat(cfg.RenewalWindowRatio, 'g', -1, 64) +
-		"|notify=" + strconv.FormatBool(cfg.NotificationsEnabled) +
-		"|notify-registered=" + strconv.FormatBool(cfg.NotificationCatalogRegistered)
 }
 
 // TestPassed reports whether this exact configuration passed the optional

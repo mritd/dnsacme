@@ -98,9 +98,6 @@ func TestSynologyUninstallRemovesPersistentDataOnlyOnUninstall(t *testing.T) {
 			t.Fatalf("postuninst does not clean %s", path)
 		}
 	}
-	if strings.Contains(script, "/var/cache/texts/DNSACME") {
-		t.Fatal("normal uninstall must leave the DSM notification catalog untouched")
-	}
 }
 
 func TestSynologyUIButtonTextUsesDSMNativeMetrics(t *testing.T) {
@@ -115,6 +112,26 @@ func TestSynologyUIButtonTextUsesDSMNativeMetrics(t *testing.T) {
 	want := ".dnsacme-win .syno-ux-button .x-btn-text { height:24px !important; padding:0 18px !important; font-size:13px !important; line-height:24px !important; }"
 	if !strings.Contains(source, want) {
 		t.Fatal("button text no longer matches DSM's native 24px vertical metrics")
+	}
+}
+
+func TestSynologyUIHasNoRemovedAdvancedOptions(t *testing.T) {
+	sourceBytes, err := os.ReadFile("synology/spk/ui/DNSACME.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(sourceBytes)
+	for _, removed := range []string{
+		`option.notifications`,
+		`publish-notifications`,
+		`onNotificationToggle`,
+		`notificationsPublished`,
+		`renewalWindowRatio`,
+		`fRenewRatio`,
+	} {
+		if strings.Contains(source, removed) {
+			t.Fatalf("removed notification UI marker is still present: %s", removed)
+		}
 	}
 }
 
@@ -137,13 +154,39 @@ func TestSynologyUIClampsInitialSizeAndReflowsNestedCards(t *testing.T) {
 		}
 	}
 	// The outer window, each card root, and each centered inner card must all
-	// participate in layout. Without these nested layouts a card rendered at the
-	// restored startup width remains clipped after the user enlarges the window.
-	if strings.Count(source, `layout: "fit"`) < 3 {
-		t.Fatal("nested card roots no longer use fit layout")
+	// participate in layout. Form roots anchor width instead of fitting height so
+	// autoScroll can measure expanded advanced fields; the log root keeps fit.
+	if strings.Count(source, `layout: "fit"`) < 2 {
+		t.Fatal("window and log card roots no longer use fit layout")
 	}
-	if strings.Count(source, `layout: "anchor"`) < 2 {
+	if strings.Count(source, `layout: "anchor"`) < 3 {
 		t.Fatal("centered cards no longer resize their children")
+	}
+}
+
+func TestSynologyUIFormScrollMeasuresNaturalContentHeight(t *testing.T) {
+	sourceBytes, err := os.ReadFile("synology/spk/ui/DNSACME.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(sourceBytes)
+	start := strings.Index(source, "    var form = new Ext.form.FormPanel({")
+	end := strings.Index(source[start:], "\n    form.dnsacmeInner")
+	if start < 0 || end < 0 {
+		t.Fatal("formPanel root block not found")
+	}
+	block := source[start : start+end]
+	for _, marker := range []string{
+		`layout: "anchor"`,
+		`defaults: { anchor: "100%" }`,
+		`autoScroll: true`,
+	} {
+		if !strings.Contains(block, marker) {
+			t.Fatalf("scrollable form root is missing %q", marker)
+		}
+	}
+	if strings.Contains(block, `layout: "fit"`) {
+		t.Fatal("fit height prevents the form root from measuring overflow")
 	}
 }
 

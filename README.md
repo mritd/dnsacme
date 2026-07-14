@@ -73,7 +73,6 @@ WebAPI, and runs an unprivileged background daemon for automatic renewal.
 - Optionally validate a certificate configuration against the Let's Encrypt staging CA without deploying it.
 - Import the first certificate into DSM, optionally create it or set it as the DSM default, then re-import future renewals automatically.
 - Keep production and staging certificates in separate storage directories.
-- Send localized DSM notifications after a manual deployment or successful background renewal.
 - Preserve package configuration and certificate storage across package upgrades.
 
 Build the package (produces one SPK per architecture):
@@ -105,34 +104,6 @@ previous Test and Apply results. Testing remains optional, while a successful pr
 Apply is always required before automatic renewal starts for the changed configuration.
 
 #### Advanced options
-
-- **Renewal window ratio** controls how early CertMagic renews a certificate. Leave it blank to use the default `1/3`. High values are intended only for renewal testing and can exhaust CA rate limits quickly.
-- **System notifications** sends separate DSM events for manual deployment and background renewal. A failed notification never marks a successful certificate deployment as failed.
-
-#### System notifications
-
-DSM stores third-party notification templates in a root-owned directory. The DNSACME
-package and daemon continue to run as the package user, but publishing notification
-templates requires one command over SSH:
-
-```sh
-sudo /var/packages/dnsacme/target/bin/dnsacme synology publish-notifications
-```
-
-The command publishes the English and Simplified Chinese catalogs, registers their event
-tags with DSM, and enables notifications. The wizard compares the published files with
-the templates embedded in the installed binary. If files are missing or outdated, it
-shows the publish command again. Sending notifications after setup does not require root.
-
-DSM may keep an already loaded notification string in memory. If wording remains stale
-after publishing an updated template, restart DSM once to reload its notification cache.
-
-To remove the root-owned notification catalog, run this command before uninstalling the
-package:
-
-```sh
-sudo /var/packages/dnsacme/target/bin/dnsacme synology publish-notifications --disable
-```
 
 #### Package details
 

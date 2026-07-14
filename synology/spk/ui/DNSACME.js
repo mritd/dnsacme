@@ -49,18 +49,6 @@ SYNO.SDS.DNSACME.I18N = {
     "field.host": "Host",
     "field.protocol": "Protocol",
     "field.port": "Port",
-    "field.renewalWindowRatio": "Renewal window ratio",
-    "placeholder.renewalWindowRatio": "Default 1/3",
-    "hint.renewalWindowRatio": "For testing only, leave blank in production. Renews automatically once the remaining certificate lifetime falls below this ratio (blank = the default 1/3). A high value such as the maximum 0.9993 renews a 90-day Let's Encrypt certificate about every 30 minutes and will quickly hit the CA rate limit; only change it to exercise the renewal pipeline.",
-    "option.notifications": "Enable system notifications",
-    "hint.notifications": "Sends a DSM notification when a certificate is deployed or renewed. The first time you enable this, run a one-time command over SSH to publish the notification templates (shown when you turn it on).",
-    "dialog.publishTitle": "One-time notification setup",
-    "dialog.publishBody": "System notifications need a one-time setup. Sign in to your NAS over SSH as an administrator, run the command below once, then return here and enable the option again.",
-    "dialog.publishCommand": "sudo /var/packages/dnsacme/target/bin/dnsacme synology publish-notifications",
-    "status.notificationsEnabled": "System notifications enabled",
-    "status.notificationsDisabled": "System notifications disabled",
-    "status.notificationsNeedPublish": "System notifications are enabled but the templates are missing or outdated. Run over SSH:",
-    "error.notifications": "Could not update notification settings: {error}",
     "advanced.settings": "Advanced settings",
     "hint.detectionFailed": "DSM connection could not be detected. Confirm the protocol and port.",
     "title.autoUpdate": "Auto Update",
@@ -142,18 +130,6 @@ SYNO.SDS.DNSACME.I18N = {
     "field.host": "主机",
     "field.protocol": "协议",
     "field.port": "端口",
-    "field.renewalWindowRatio": "续期窗口比例",
-    "placeholder.renewalWindowRatio": "默认 1/3",
-    "hint.renewalWindowRatio": "仅供测试, 正式环境请留空. 证书剩余有效期占比低于该值时自动续期 (留空为默认 1/3). 设为接近上限的 0.9993 会让 90 天 Let's Encrypt 证书约每 30 分钟续期一次, 很快触发 CA 限额, 仅用于验证续期流程.",
-    "option.notifications": "启用系统通知",
-    "hint.notifications": "证书部署或续期时发送 DSM 通知. 首次启用需通过 SSH 执行一条一次性命令以发布通知模板(打开开关时会给出).",
-    "dialog.publishTitle": "一次性通知设置",
-    "dialog.publishBody": "系统通知需要一次性设置. 请通过 SSH 以管理员身份登录 NAS 执行下面的命令(仅需一次), 完成后回到本页重新打开开关.",
-    "dialog.publishCommand": "sudo /var/packages/dnsacme/target/bin/dnsacme synology publish-notifications",
-    "status.notificationsEnabled": "系统通知已启用",
-    "status.notificationsDisabled": "系统通知已关闭",
-    "status.notificationsNeedPublish": "系统通知已启用, 但模板缺失或版本不一致. 请通过 SSH 执行:",
-    "error.notifications": "更新通知设置失败: {error}",
     "advanced.settings": "高级设置",
     "hint.detectionFailed": "未能自动探测本机 DSM 端口, 请确认协议和端口.",
     "title.autoUpdate": "自动更新",
@@ -255,12 +231,6 @@ SYNO.SDS.DNSACME.injectCss = function () {
     ".dnsacme-adv-toggle:after { content:''; height:1px; background:#86b3d4; flex:1; margin-left:14px; }",
     ".dnsacme-adv-arrow { display:inline-block; width:14px; margin-right:6px; color:#0b5f9f; }",
     ".dnsacme-adv-panel { padding-bottom:4px; }",
-    /* Inline flush-left row (label + input on one line) for the renewal-window
-       field so it groups with the testing checkboxes below instead of the
-       right-aligned connection label column. */
-    ".dnsacme-inline-row { margin:2px 0 4px 0; }",
-    ".dnsacme-inline-row td { vertical-align:middle; }",
-    ".dnsacme-inline-label { font-size:13px; color:#333; padding-right:12px; white-space:nowrap; }",
     ".dnsacme-dns-form .x-form-item-label { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }",
     ".dnsacme-win .x-window-header.x-panel-icon { background-image:url(/webman/3rdparty/dnsacme/images/dnsacme_48.png) !important; background-repeat:no-repeat !important; background-position:18px 8px !important; background-size:24px 24px !important; }",
     ".dnsacme-error-dialog { width:auto; max-width:100%; padding:0; color:#414b54; box-sizing:border-box; }",
@@ -268,10 +238,6 @@ SYNO.SDS.DNSACME.injectCss = function () {
     ".dnsacme-error-icon { flex:0 0 32px; width:32px; height:32px; margin-right:14px; border-radius:50%; background:#fdecec; color:#e64040; font-size:19px; font-weight:700; line-height:32px; text-align:center; }",
     ".dnsacme-error-title { margin:0; color:#2c333a; font-size:16px; font-weight:700; line-height:1.35; }",
     ".dnsacme-error-message { margin:0 0 0 46px; color:#5f6b76; font-size:13px; line-height:1.65; white-space:normal; word-break:break-word; }",
-    // The notifications root dialog carries no icon head, so its body starts flush
-    // and the command sits in a selectable monospace block below it.
-    ".dnsacme-notify-body { margin:0; color:#5f6b76; font-size:13px; line-height:1.65; white-space:normal; word-break:break-word; }",
-    ".dnsacme-cmd { margin-top:12px; padding:10px 12px; background:#f2f4f6; border:1px solid #dfe3e8; border-radius:6px; font-family:Menlo,Monaco,Consolas,monospace; font-size:12px; line-height:1.5; color:#2c333a; white-space:pre-wrap; word-break:break-all; -webkit-user-select:all; user-select:all; }",
     // The dialog now renders inside the app window's native message box, which
     // supplies its own rounded/shadowed chrome and OK button; icon:"" leaves an
     // empty native icon slot, so collapse it and let the body HTML own the layout.
@@ -755,7 +721,11 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
     var form = new Ext.form.FormPanel({
       id: "dnsacme-card-" + id,
       border: false,
-      layout: "fit",
+      // Anchor only the width. A fit layout also forces the child card's height
+      // to the viewport, so expanded advanced fields overflow inside that fixed
+      // card and the outer autoScroll container never sees a taller child.
+      layout: "anchor",
+      defaults: { anchor: "100%" },
       autoScroll: true,
       bodyStyle: "padding:24px 24px 22px 24px;background:transparent;",
       items: [card]
@@ -896,47 +866,6 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
     me.fScheme = SYNO.SDS.DNSACME.combo({ fieldLabel: SYNO.SDS.DNSACME.t("field.protocol"), width: 160 }, [["https", "HTTPS"], ["http", "HTTP"]]);
     me.fPort = new SYNO.ux.NumberField({ fieldLabel: SYNO.SDS.DNSACME.t("field.port"), width: 120, minValue: 1, maxValue: 65535, allowDecimals: false, allowBlank: false });
     me.liveValidateField(me.fPort);
-    // Renewal window as remaining:total lifetime. Blank posts 0, which the
-    // backend resolves to CertMagic's default (1/3). Five decimals let a test
-    // dial in short renew cycles: Let's Encrypt backdates NotBefore by 1 hour, so
-    // for a 90-day cert the cycle is (1-ratio)*90d minus that hour - 0.9993 is
-    // about 30 minutes. The maximum is capped there because anything above
-    // ~0.9995 re-enters the window before issuance time and would renew on every
-    // 10-minute maintenance scan until the CA rate limit trips; the backend still
-    // accepts (0,1] from root-edited YAML or the environment override.
-    // Renewal window ratio is a testing knob, so it reads with the testing
-    // checkboxes below it rather than the connection fields above. A 2-column table
-    // layout keeps the label and input on one line while the whole row sits flush
-    // left (same edge as the checkboxes and hints), out of the right-aligned
-    // connection label column.
-    me.fRenewRatio = new SYNO.ux.NumberField({
-      hideLabel: true, width: 160,
-      allowDecimals: true, decimalPrecision: 5, minValue: 0.00001, maxValue: 0.9993, allowBlank: true,
-      emptyText: SYNO.SDS.DNSACME.t("placeholder.renewalWindowRatio")
-    });
-    me.liveValidateField(me.fRenewRatio);
-    me.renewRatioRow = new Ext.Container({
-      hideLabel: true, layout: "table", layoutConfig: { columns: 2 }, cls: "dnsacme-inline-row",
-      items: [
-        new Ext.BoxComponent({ autoEl: { tag: "div", cls: "dnsacme-inline-label", html: SYNO.SDS.DNSACME.t("field.renewalWindowRatio") } }),
-        me.fRenewRatio
-      ]
-    });
-    me.renewRatioHint = new Ext.BoxComponent({
-      autoEl: { tag: "div", cls: "dnsacme-field-note dnsacme-field-warn", html: SYNO.SDS.DNSACME.t("hint.renewalWindowRatio") }
-    });
-    // System notifications persist through their own CGI action (not the form save).
-    // Enabling before the one-time publish command has run returns needsPublish, and
-    // the check handler shows that command. setNotifyChecked keeps the control's
-    // originalValue in sync so it never marks the step dirty.
-    me.fNotify = new SYNO.ux.Checkbox({ boxLabel: SYNO.SDS.DNSACME.t("option.notifications"), hideLabel: true, style: "margin-top:6px" });
-    me.fNotify.on("check", function (cb, checked) {
-      if (me._notifySyncing) { return; }
-      me.onNotificationToggle(checked);
-    }, me);
-    me.notifyHint = new Ext.BoxComponent({
-      autoEl: { tag: "div", cls: "dnsacme-field-note dnsacme-field-warn", html: SYNO.SDS.DNSACME.t("hint.notifications") }
-    });
     me.advHintVisible = false;
     me.advToggle = new Ext.BoxComponent({
       autoEl: { tag: "div", cls: "dnsacme-adv-toggle", html: '<span class="dnsacme-adv-arrow">▸</span>' + SYNO.SDS.DNSACME.t("advanced.settings") },
@@ -951,7 +880,7 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
     me.advPanel = new Ext.Panel({
       border: false, hidden: true, hideLabel: true, cls: "dnsacme-adv-panel", layout: "form", labelWidth: 160, labelAlign: "right",
       bodyStyle: "padding:0", defaults: { msgTarget: "side" },
-      items: [me.fHost, me.fScheme, me.fPort, me.renewRatioRow, me.renewRatioHint, me.fNotify, me.notifyHint],
+      items: [me.fHost, me.fScheme, me.fPort],
       listeners: {
         afterrender: function (panel) {
           me.advHintEl = panel.body.insertFirst({
@@ -991,65 +920,6 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
   setAdvancedHintVisible: function (visible) {
     this.advHintVisible = visible;
     if (this.advHintEl) { this.advHintEl.setDisplayed(visible); }
-  },
-
-  // setNotifyChecked reflects a value into the notifications checkbox without
-  // firing the toggle action (guarded by _notifySyncing) and resets originalValue
-  // so the control never contributes to the step's dirty state.
-  setNotifyChecked: function (checked) {
-    var me = this;
-    if (!me.fNotify) { return; }
-    me._notifySyncing = true;
-    me.fNotify.setValue(checked);
-    me.fNotify.originalValue = checked;
-    me._notifySyncing = false;
-  },
-
-  // onNotificationToggle persists the notifications toggle through its dedicated
-  // CGI action. Enabling before the one-time publish command has run returns
-  // needsPublish; the checkbox reverts and the publish-command dialog is shown. The
-  // control's value always follows the server's authoritative reply.
-  onNotificationToggle: function (checked) {
-    var me = this;
-    SYNO.SDS.DNSACME.request("notifications", "POST", { enabled: checked }, function (ok, data) {
-      if (me._closed) { return; }
-      if (!ok) {
-        me.setNotifyChecked(false);
-        me.setStatus(SYNO.SDS.DNSACME.t("error.notifications", { error: data }));
-        return;
-      }
-      if (checked && data && data.needsPublish) {
-        me.setNotifyChecked(false);
-        me.showPublishRequiredDialog();
-        return;
-      }
-      var enabled = !!(data && data.enabled);
-      me.setNotifyChecked(enabled);
-      me.setStatus(SYNO.SDS.DNSACME.t(enabled ? "status.notificationsEnabled" : "status.notificationsDisabled"));
-    }, me);
-  },
-
-  // showPublishRequiredDialog explains the one-time notification setup and presents
-  // the single command that publishes the templates. Routed through the app
-  // window's message box for DSM-native chrome, matching showActionFailure.
-  showPublishRequiredDialog: function () {
-    var me = this;
-    var title = SYNO.SDS.DNSACME.t("dialog.publishTitle");
-    var body = [
-      '<div class="dnsacme-error-dialog">',
-      '<div class="dnsacme-notify-body">' + Ext.util.Format.htmlEncode(SYNO.SDS.DNSACME.t("dialog.publishBody")) + '</div>',
-      '<div class="dnsacme-cmd">' + Ext.util.Format.htmlEncode(SYNO.SDS.DNSACME.t("dialog.publishCommand")) + '</div>',
-      '</div>'
-    ].join("");
-    me.getMsgBox().show({
-      title: title,
-      msg: body,
-      buttons: Ext.MessageBox.OK,
-      icon: "",
-      minWidth: 420,
-      maxWidth: 560,
-      cls: "dnsacme-error-msgbox"
-    });
   },
 
   buildValidation: function () {
@@ -1199,14 +1069,14 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
       SYNO.SDS.DNSACME.request("config", "GET", null, function (ok2, data2) {
         if (me._closed) { return; }
         if (!ok2) { me.unmaskMain(); me.setStatus(SYNO.SDS.DNSACME.t("status.loadFailed", { error: data2 })); return; }
-        me.applyConfig(data2.config, data2.testPassed, data2.canRenew, data2.persisted, data2.detected, data2.notificationsPublished);
+        me.applyConfig(data2.config, data2.testPassed, data2.canRenew, data2.persisted, data2.detected);
         me.unmaskMain();
         me.setStatus(opts.status || SYNO.SDS.DNSACME.t("status.ready"), opts.error);
       }, me);
     }, me);
   },
 
-  applyConfig: function (cfg, testPassed, canRenew, persisted, detected, notificationsPublished) {
+  applyConfig: function (cfg, testPassed, canRenew, persisted, detected) {
     var me = this;
     me.setActionsBusy(false);
     // cfg is already redacted by the CGI. Mask sentinels are intentionally kept
@@ -1241,18 +1111,6 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
     me.fCertDesc.setValue(cfg.synology.certificateDesc || "");
     me.fCreate.setValue(!!cfg.synology.create);
     me.fAsDefault.setValue(!!cfg.synology.asDefault);
-    // 0 / absent means "CertMagic default"; show it as a blank field rather than
-    // a literal 0 so the placeholder can explain the default.
-    me.fRenewRatio.setValue(cfg.renewalWindowRatio > 0 ? cfg.renewalWindowRatio : "");
-    // Notifications persist through their own action; reflect the server value
-    // without firing the toggle handler and keep it out of the step's dirty state.
-    me.setNotifyChecked(!!cfg.notificationsEnabled);
-    // Enabled but the catalog is gone (e.g. DSM rebuilt its notification database):
-    // the checkbox stays on to preserve intent, but warn and name the one-time
-    // command so delivery is not silently dead.
-    if (cfg.notificationsEnabled && notificationsPublished === false) {
-      me.setStatus(SYNO.SDS.DNSACME.t("status.notificationsNeedPublish") + " " + SYNO.SDS.DNSACME.t("dialog.publishCommand"));
-    }
     me._testPassed = !!testPassed;
     for (var i = 0; i < me.stepForms.length; i++) { me.markStepClean(i); }
     if (canRenew && !me.forceWizard) {
@@ -1288,9 +1146,6 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
         password: me.fPassword.getValue(), certificateDesc: Ext.util.Format.trim(me.fCertDesc.getValue()),
         create: me.fCreate.getValue(), asDefault: me.fAsDefault.getValue()
       },
-      // Top level like the persisted YAML: the ratio tunes renewal timing only,
-      // so the backend keeps it out of the identity hash. Blank posts 0 (default).
-      renewalWindowRatio: Number(me.fRenewRatio.getValue()) || 0,
       // Runtime paths are package-owned and have no editable controls. Preserve
       // the server-provided values instead of synthesizing browser-side paths.
       runtime: (me.cfg && me.cfg.runtime) || {}
@@ -1316,7 +1171,7 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
         me.cfg = data.config;
         me._testPassed = !!data.testPassed;
       } else {
-        me.applyConfig(data.config, data.testPassed, data.canRenew, data.persisted, data.detected, data.notificationsPublished);
+        me.applyConfig(data.config, data.testPassed, data.canRenew, data.persisted, data.detected);
       }
       me.setStatus(SYNO.SDS.DNSACME.t("status.saved"));
       if (cb) { cb.call(scope || me); }
