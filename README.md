@@ -247,3 +247,9 @@ dnsacme uses environment variables prefixed with `ACME_`, which are defined as f
 | `ACME_OBTAINING_HOOK` | `--obtaining-hook` | `/opt/scripts/acme-obtaining-hook.sh`                          |
 | `ACME_OBTAINED_HOOK`  | `--obtained-hook`  | `/opt/scripts/acme-obtained-hook.sh`                           |
 | `ACME_FAILED_HOOK`    | `--failed-hook`    | `/opt/scripts/acme-failed-hook.sh`                             |
+
+### License
+
+DNSACME is licensed under the [Apache License 2.0](LICENSE). See [NOTICE](NOTICE)
+for attribution information and [TRADEMARKS.md](TRADEMARKS.md) for the project
+name and logo policy.

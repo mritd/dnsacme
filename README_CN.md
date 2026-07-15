@@ -229,3 +229,8 @@ go build -trimpath -ldflags '-w -s' -tags=slim,godaddy,cloudflare
 | `ACME_OBTAINING_HOOK` | `--obtaining-hook` | `/opt/scripts/acme-obtaining-hook.sh` |
 | `ACME_OBTAINED_HOOK` | `--obtained-hook` | `/opt/scripts/acme-obtained-hook.sh` |
 | `ACME_FAILED_HOOK` | `--failed-hook` | `/opt/scripts/acme-failed-hook.sh` |
+
+### 许可证
+
+DNSACME 使用 [Apache License 2.0](LICENSE) 许可证。署名信息请参阅 [NOTICE](NOTICE)，
+项目名称和 Logo 的使用规则请参阅 [TRADEMARKS.md](TRADEMARKS.md)。
