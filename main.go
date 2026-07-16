@@ -25,7 +25,7 @@ var conf = Config{DNSConfig: make(map[string]string)}
 
 var rootCmd = &cobra.Command{
 	Use:     "dnsacme",
-	Short:   "Simple tool to manage ACME Cert(Ony Supported DNS-01)",
+	Short:   "Simple tool to manage ACME Cert (Only Supported DNS-01)",
 	Example: "  dnsacme --domain='*.example.com' --email='your.example.com' --dns=cloudflare --dns-config=CLOUDFLARE_API_TOKEN=xxxxxxxxxxxxxx",
 	Version: commit,
 	PreRun:  initConfig,

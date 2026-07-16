@@ -36,7 +36,7 @@
 
 ```sh
 ~ ❯❯❯ dnsacme --help
-Simple tool to manage ACME Cert(Ony Supported DNS-01)
+Simple tool to manage ACME Cert (Only Supported DNS-01)
 
 Usage:
   dnsacme [flags]
@@ -94,7 +94,16 @@ sudo /usr/syno/bin/synopkg install dnsacme-synology-amd64.spk
 4. 可以选择点击 **测试运行**。此操作会申请一张新的 staging 证书并验证 DSM 登录，但不会将证书导入 DSM。测试成功后建议至少等待 10 分钟再应用，让 DNS 缓存中的测试 challenge 失效。
 5. 准备好后点击 **应用**。此操作会申请所选的生产证书并导入 DSM。也可以跳过测试直接应用，确认生产环境验证失败可能计入 CA 频率限制即可。
 
+为什么需要输入 DSM 管理员密码？DNSACME 与 acme.sh 的 Synology 部署逻辑一致，通过本机 DSM WebAPI 登录 DSM，再由 DSM 完成证书导入和分配。这些 API 只允许管理员账户调用，因此需要提供具有管理员权限的 DSM 账户。另一种做法是直接修改 DSM 的证书文件，但这需要 root 权限，路径、权限或文件内容一旦修改错误，还可能损坏 DSM 的证书数据。因此 DNSACME 的守护进程仍以非特权用户运行，只通过 DSM WebAPI 更新证书，不直接改写磁盘上的证书文件。
+
 只有当前配置成功完成 **应用** 后，续期守护进程才会开始工作。修改域名、DNS 凭据、DSM 部署目标或 CA 模式后，之前的测试和应用结果会失效。测试仍然可选，但修改后的配置必须成功应用一次才能开始自动续期。
+
+套件服务由 DSM 套件服务管理器运行前台进程 `dnsacme synology daemon`。可以通过以下命令查看内置帮助：
+
+```sh
+/var/packages/dnsacme/target/bin/dnsacme synology --help
+/var/packages/dnsacme/target/bin/dnsacme synology daemon --help
+```
 
 #### 高级选项
 

@@ -346,7 +346,7 @@ SYNO.SDS.DNSACME.combo = function (cfg, pairs) {
   }, cfg));
 };
 
-Ext.define("SYNO.SDS.DNSACME.Application", {
+Ext.define("com.synocommunity.packages.dnsacme", {
   extend: "SYNO.SDS.AppInstance",
   appWindowName: "SYNO.SDS.DNSACME.MainWindow"
 });

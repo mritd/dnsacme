@@ -1,6 +1,6 @@
 {
   "DNSACME.js": {
-    "SYNO.SDS.DNSACME.Application": {
+    "com.synocommunity.packages.dnsacme": {
       "type": "app",
       "title": "DNSACME",
       "desc": "DNSACME",

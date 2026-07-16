@@ -68,6 +68,51 @@ func TestSynologyPackageMaintainerLinksToRepository(t *testing.T) {
 	}
 }
 
+func TestSynologyApplicationIdentifierIsConsistent(t *testing.T) {
+	const (
+		applicationID    = "com.synocommunity.packages.dnsacme"
+		oldApplicationID = "SYNO.SDS.DNSACME.Application"
+	)
+
+	tests := []struct {
+		name string
+		path string
+		want string
+	}{
+		{
+			name: "INFO dsmappname",
+			path: "synology/spk/INFO",
+			want: `dsmappname="` + applicationID + `"`,
+		},
+		{
+			name: "UI config application key",
+			path: "synology/spk/ui/config",
+			want: `"` + applicationID + `": {`,
+		},
+		{
+			name: "AppInstance class",
+			path: "synology/spk/ui/DNSACME.js",
+			want: `Ext.define("` + applicationID + `", {`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data, err := os.ReadFile(tt.path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			source := string(data)
+			if !strings.Contains(source, tt.want) {
+				t.Fatalf("%s is missing application identifier %q", tt.path, applicationID)
+			}
+			if strings.Contains(source, oldApplicationID) {
+				t.Fatalf("%s still contains obsolete application identifier %q", tt.path, oldApplicationID)
+			}
+		})
+	}
+}
+
 func TestSynologyLifecycleDropsRootBeforeStart(t *testing.T) {
 	data, err := os.ReadFile("synology/spk/scripts/start-stop-status")
 	if err != nil {

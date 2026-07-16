@@ -37,7 +37,7 @@
 
 ```sh
 ~ ❯❯❯ dnsacme --help
-Simple tool to manage ACME Cert(Ony Supported DNS-01)
+Simple tool to manage ACME Cert (Only Supported DNS-01)
 
 Usage:
   dnsacme [flags]
@@ -98,10 +98,27 @@ Open **DNSACME** from the DSM main menu after installation. The normal setup flo
 4. Optionally run **Test Run**. This requests a fresh staging certificate and verifies DSM login, but does not import the certificate. After a successful test, wait at least 10 minutes before applying so DNS caches can discard the staging challenge.
 5. Run **Apply** whenever you are ready. This requests the selected production certificate and imports it into DSM. You may apply directly without a staging test, after acknowledging that a production validation failure can count against CA rate limits.
 
+Why does DNSACME ask for a DSM administrator password? Certificate deployment follows
+the same approach as the acme.sh Synology deploy hook: it signs in to the local DSM
+WebAPI and asks DSM to import and assign the certificate. DSM restricts these API
+operations to administrators, so an administrator account is required. The alternative
+would be editing DSM's certificate files directly, which requires root access and can
+damage DSM certificate data if a path, permission, or file is changed incorrectly.
+DNSACME therefore keeps its daemon unprivileged and uses the DSM WebAPI instead of
+modifying certificate files on disk.
+
 The renewal daemon remains idle until **Apply** succeeds for the current configuration.
 Changing the domain, DNS credentials, DSM deployment target, or CA mode invalidates the
 previous Test and Apply results. Testing remains optional, while a successful production
 Apply is always required before automatic renewal starts for the changed configuration.
+
+The package service runs `dnsacme synology daemon` as a foreground process under
+DSM's package service manager. Its built-in help is available with:
+
+```sh
+/var/packages/dnsacme/target/bin/dnsacme synology --help
+/var/packages/dnsacme/target/bin/dnsacme synology daemon --help
+```
 
 #### Advanced options
 
