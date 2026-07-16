@@ -137,7 +137,7 @@ func defaultSynologyConfig() SynologyConfig {
 			Scheme:          "https",
 			Host:            "127.0.0.1",
 			Port:            5001,
-			CertificateDesc: "dnsacme",
+			CertificateDesc: "DNSACME",
 			Create:          true,
 			AsDefault:       true,
 		},

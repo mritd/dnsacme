@@ -9,6 +9,11 @@ import (
 )
 
 func TestSynologyConfigResponse_Shape(t *testing.T) {
+	defaults := defaultSynologyConfig()
+	if defaults.Synology.CertificateDesc != "DNSACME" {
+		t.Fatalf("unexpected default certificate description: %q", defaults.Synology.CertificateDesc)
+	}
+
 	dir := t.TempDir()
 	t.Setenv("DNSACME_NGINX_CONF", dir+"/nginx.conf")
 	_ = os.WriteFile(dir+"/nginx.conf", []byte("server { root /usr/syno/synoman; listen 5001 default_server ssl; }"), 0o600)

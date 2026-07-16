@@ -855,7 +855,7 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
       fieldLabel: SYNO.SDS.DNSACME.t("field.dsmPassword"), width: 380, inputType: "password", allowBlank: false,
       emptyText: SYNO.SDS.DNSACME.t("placeholder.dsmPassword")
     });
-    me.fCertDesc = new SYNO.ux.TextField({ fieldLabel: SYNO.SDS.DNSACME.t("field.certificateDescription"), width: 380, emptyText: "dnsacme" });
+    me.fCertDesc = new SYNO.ux.TextField({ fieldLabel: SYNO.SDS.DNSACME.t("field.certificateDescription"), width: 380, emptyText: "DNSACME" });
     me.liveValidateField(me.fAccount);
     me.liveValidateField(me.fPassword);
     me.fCreate = new SYNO.ux.Checkbox({ boxLabel: SYNO.SDS.DNSACME.t("option.createCertificate"), hideLabel: true, style: "margin-top:8px" });

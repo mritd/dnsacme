@@ -98,14 +98,20 @@ Open **DNSACME** from the DSM main menu after installation. The normal setup flo
 4. Optionally run **Test Run**. This requests a fresh staging certificate and verifies DSM login, but does not import the certificate. After a successful test, wait at least 10 minutes before applying so DNS caches can discard the staging challenge.
 5. Run **Apply** whenever you are ready. This requests the selected production certificate and imports it into DSM. You may apply directly without a staging test, after acknowledging that a production validation failure can count against CA rate limits.
 
-Why does DNSACME ask for a DSM administrator password? Certificate deployment follows
-the same approach as the acme.sh Synology deploy hook: it signs in to the local DSM
-WebAPI and asks DSM to import and assign the certificate. DSM restricts these API
-operations to administrators, so an administrator account is required. The alternative
-would be editing DSM's certificate files directly, which requires root access and can
-damage DSM certificate data if a path, permission, or file is changed incorrectly.
-DNSACME therefore keeps its daemon unprivileged and uses the DSM WebAPI instead of
-modifying certificate files on disk.
+#### Why a DSM administrator password is required
+
+Certificate deployment follows the same approach as the acme.sh Synology deploy hook:
+DNSACME signs in to the local DSM WebAPI and asks DSM to import and assign the certificate.
+DSM restricts these API operations to administrators, so an administrator account is
+required. The alternative would be editing DSM's certificate files directly, which
+requires root access and can damage DSM certificate data if a path, permission, or file
+is changed incorrectly. DNSACME therefore keeps its daemon unprivileged and uses the DSM
+WebAPI instead of modifying certificate files on disk.
+
+##### Audit references
+
+- acme.sh: [DSM WebAPI login](https://github.com/acmesh-official/acme.sh/blob/ebb5cc4981ac38994b124441ef38b961ef565f27/deploy/synology_dsm.sh#L228-L233), [certificate lookup and administrator permission check](https://github.com/acmesh-official/acme.sh/blob/ebb5cc4981ac38994b124441ef38b961ef565f27/deploy/synology_dsm.sh#L331-L349), and [certificate import](https://github.com/acmesh-official/acme.sh/blob/ebb5cc4981ac38994b124441ef38b961ef565f27/deploy/synology_dsm.sh#L364-L383).
+- DNSACME: [DSM WebAPI login](synology_deploy.go#L109-L139), [exact certificate lookup](synology_deploy.go#L246-L277), and [certificate import](synology_deploy.go#L159-L244).
 
 The renewal daemon remains idle until **Apply** succeeds for the current configuration.
 Changing the domain, DNS credentials, DSM deployment target, or CA mode invalidates the

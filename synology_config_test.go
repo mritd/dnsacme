@@ -991,7 +991,7 @@ func TestRunSynologyDaemonDeploysRenewedCertificate(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")
 	imports := 0
-	server := fakeSynologyServerWithCerts(t, map[string]string{"dnsacme": "cert-id-1"}, func(fields map[string]string) {
+	server := fakeSynologyServerWithCerts(t, map[string]string{"DNSACME": "cert-id-1"}, func(fields map[string]string) {
 		imports++
 		if fields["id"] != "cert-id-1" {
 			t.Fatalf("renewal import should update existing certificate id, fields=%+v", fields)
@@ -1119,7 +1119,7 @@ func TestSynologyDeployClientAndCertificateSplit(t *testing.T) {
 	if client.sid != "sid-1" {
 		t.Fatalf("unexpected sid: %s", client.sid)
 	}
-	if err := client.importCertificate(context.Background(), "dnsacme", true, true, []byte("key"), leaf, chain); err != nil {
+	if err := client.importCertificate(context.Background(), "DNSACME", true, true, []byte("key"), leaf, chain); err != nil {
 		t.Fatal(err)
 	}
 	if err := client.importCertificate(context.Background(), "missing", false, true, []byte("key"), leaf, chain); err == nil || !strings.Contains(err.Error(), "was not found") {
@@ -1152,7 +1152,7 @@ func TestDeploySynologyCertificateFromFiles(t *testing.T) {
 		Port:            atoiForTest(port),
 		Account:         "admin",
 		Password:        "password",
-		CertificateDesc: "dnsacme",
+		CertificateDesc: "DNSACME",
 		Create:          true,
 		AsDefault:       true,
 	}, keyPath, certPath)
@@ -1179,7 +1179,7 @@ func TestSynologyDeployClientFailures(t *testing.T) {
 			_, _ = w.Write([]byte(`{"success":true,"data":{"sid":"sid-1","synotoken":"token-1"}}`))
 		case "/webapi/entry.cgi":
 			if !strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/") {
-				_, _ = w.Write([]byte(`{"success":true,"data":{"certificates":[{"id":"cert-id-1","desc":"dnsacme"}]}}`))
+				_, _ = w.Write([]byte(`{"success":true,"data":{"certificates":[{"id":"cert-id-1","desc":"DNSACME"}]}}`))
 				return
 			}
 			_, _ = w.Write([]byte(`{"success":false,"error":{"code":123,"text":"bad import"}}`))
@@ -1192,7 +1192,7 @@ func TestSynologyDeployClientFailures(t *testing.T) {
 	if err := client.login(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if err := client.importCertificate(context.Background(), "dnsacme", true, false, []byte("key"), []byte("cert"), nil); err == nil || !strings.Contains(err.Error(), "bad import") {
+	if err := client.importCertificate(context.Background(), "DNSACME", true, false, []byte("key"), []byte("cert"), nil); err == nil || !strings.Contains(err.Error(), "bad import") {
 		t.Fatalf("expected import failure, got %v", err)
 	}
 
@@ -1228,7 +1228,7 @@ func validSynologyConfig(dir string) SynologyConfig {
 	cfg.DNS.Config[ENV_CLOUDFLARE_API_TOKEN] = "cf-token"
 	cfg.Synology.Account = "admin"
 	cfg.Synology.Password = "password"
-	cfg.Synology.CertificateDesc = "dnsacme"
+	cfg.Synology.CertificateDesc = "DNSACME"
 	cfg.Runtime.StorageDir = filepath.Join(dir, "certmagic")
 	cfg.Runtime.StagingDir = filepath.Join(dir, "staging")
 	cfg.Runtime.LogPath = filepath.Join(dir, "dnsacme.log")
@@ -1273,7 +1273,7 @@ func parseCGIResponse(t *testing.T, raw string) cgiResponse {
 }
 
 func fakeSynologyServer(t *testing.T) *httptest.Server {
-	return fakeSynologyServerWithCerts(t, map[string]string{"dnsacme": "cert-id-1"}, nil)
+	return fakeSynologyServerWithCerts(t, map[string]string{"DNSACME": "cert-id-1"}, nil)
 }
 
 func fakeSynologyServerWithCerts(t *testing.T, certs map[string]string, onImport func(map[string]string)) *httptest.Server {

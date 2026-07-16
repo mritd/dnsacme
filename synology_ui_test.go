@@ -68,6 +68,16 @@ func TestSynologyPackageMaintainerLinksToRepository(t *testing.T) {
 	}
 }
 
+func TestSynologyUICertificateDescriptionDefault(t *testing.T) {
+	data, err := os.ReadFile("synology/spk/ui/DNSACME.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `emptyText: "DNSACME"`) {
+		t.Fatal("certificate description placeholder must match the package default")
+	}
+}
+
 func TestSynologyApplicationIdentifierIsConsistent(t *testing.T) {
 	const (
 		applicationID    = "com.synocommunity.packages.dnsacme"
