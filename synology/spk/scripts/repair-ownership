@@ -1,0 +1,97 @@
+#!/bin/sh
+
+PACKAGE_NAME="dnsacme"
+PACKAGE_USER="sc-dnsacme"
+PACKAGE_GROUP="synocommunity"
+PACKAGE_ROOT="/var/packages/${PACKAGE_NAME}"
+
+ownership_error() {
+  printf 'dnsacme ownership migration: %s\n' "$*" >&2
+  return 1
+}
+
+validate_package_root() {
+  resolved_root=$1
+  storage_name=$2
+
+  case "$resolved_root" in
+    ""|/)
+      ownership_error "refusing unsafe package root: ${resolved_root:-<empty>}"
+      return 1
+      ;;
+  esac
+
+  # Depending on the DSM release and package layout, these command-line roots
+  # resolve either to the system FHS paths below or directly into a numbered
+  # volume. Keep every accepted target exact and tied to its storage class.
+  case "${storage_name}:${resolved_root}" in
+    "@appdata:/usr/local/packages/@appdata/${PACKAGE_NAME}"|\
+    "@appconf:/usr/syno/etc/packages/${PACKAGE_NAME}"|\
+    "@apphome:/usr/local/packages/@apphome/${PACKAGE_NAME}")
+      return 0
+      ;;
+  esac
+
+  # DSM stores package-owned data below a numbered volume. Match the complete
+  # physical path so a replaced package-root symlink cannot redirect chown to
+  # another tree that merely contains a similarly named directory.
+  volume_name=${resolved_root#/volume}
+  volume_name=${volume_name%%/*}
+  case "$volume_name" in
+    ""|*[!0-9]*)
+      ownership_error "package root is outside a numbered DSM volume: $resolved_root"
+      return 1
+      ;;
+  esac
+  if [ "$resolved_root" != "/volume${volume_name}/${storage_name}/${PACKAGE_NAME}" ]; then
+    ownership_error "unexpected package root for ${storage_name}: $resolved_root"
+    return 1
+  fi
+}
+
+repair_package_root() {
+  logical_root=$1
+  storage_name=$2
+
+  # A package root may not exist yet during a fresh installation. A present but
+  # dangling symlink is invalid rather than absent and must abort migration.
+  if [ ! -e "$logical_root" ]; then
+    if [ -L "$logical_root" ]; then
+      ownership_error "package root is a dangling symlink: $logical_root"
+      return 1
+    fi
+    return 0
+  fi
+
+  resolved_root=$(readlink -f "$logical_root") || {
+    ownership_error "cannot resolve package root: $logical_root"
+    return 1
+  }
+  validate_package_root "$resolved_root" "$storage_name" || return 1
+
+  # -P keeps traversal physical and -h changes a symlink itself. This repairs
+  # retained package data without following an internal symlink outside it.
+  chown -hR -P "${PACKAGE_USER}:${PACKAGE_GROUP}" "$resolved_root" || {
+    ownership_error "cannot repair ownership below: $resolved_root"
+    return 1
+  }
+}
+
+repair_package_ownership() {
+  if [ "$(id -u)" -ne 0 ]; then
+    ownership_error "root privileges are required"
+    return 1
+  fi
+  if ! id "$PACKAGE_USER" >/dev/null 2>&1; then
+    ownership_error "package account does not exist: $PACKAGE_USER"
+    return 1
+  fi
+  if [ "$(id -gn "$PACKAGE_USER")" != "$PACKAGE_GROUP" ]; then
+    ownership_error "package account primary group is not $PACKAGE_GROUP"
+    return 1
+  fi
+
+  repair_package_root "${PACKAGE_ROOT}/var" "@appdata" || return 1
+  repair_package_root "${PACKAGE_ROOT}/etc" "@appconf" || return 1
+  repair_package_root "${PACKAGE_ROOT}/home" "@apphome" || return 1
+}

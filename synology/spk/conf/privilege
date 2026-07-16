@@ -1,5 +1,17 @@
 {
   "defaults": {
     "run-as": "package"
-  }
+  },
+  "username": "sc-dnsacme",
+  "groupname": "synocommunity",
+  "ctrl-script": [
+    {
+      "action": "postinst",
+      "run-as": "root"
+    },
+    {
+      "action": "postupgrade",
+      "run-as": "root"
+    }
+  ]
 }

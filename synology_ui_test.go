@@ -3,7 +3,10 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -132,8 +135,224 @@ func TestSynologyLifecycleDropsRootBeforeStart(t *testing.T) {
 	if !strings.Contains(script, `if [ "$(id -u)" -eq 0 ]; then`) {
 		t.Fatal("lifecycle script must detect a direct root start")
 	}
-	if !strings.Contains(script, `exec su -s /bin/sh dnsacme -c "/var/packages/dnsacme/scripts/start-stop-status start"`) {
+	if !strings.Contains(script, `exec su -s /bin/sh sc-dnsacme -c "/var/packages/dnsacme/scripts/start-stop-status start"`) {
 		t.Fatal("lifecycle script must drop root before launching the daemon")
+	}
+}
+
+func TestSynologyPackageIdentityAndRootMigrationHooks(t *testing.T) {
+	data, err := os.ReadFile("synology/spk/conf/privilege")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var privilege struct {
+		Defaults struct {
+			RunAs string `json:"run-as"`
+		} `json:"defaults"`
+		Username   string `json:"username"`
+		Groupname  string `json:"groupname"`
+		CtrlScript []struct {
+			Action string `json:"action"`
+			RunAs  string `json:"run-as"`
+		} `json:"ctrl-script"`
+	}
+	if err := json.Unmarshal(data, &privilege); err != nil {
+		t.Fatalf("invalid privilege manifest: %v", err)
+	}
+	if privilege.Defaults.RunAs != "package" {
+		t.Fatalf("default lifecycle identity = %q, want package", privilege.Defaults.RunAs)
+	}
+	if privilege.Username != "sc-dnsacme" {
+		t.Fatalf("package username = %q, want sc-dnsacme", privilege.Username)
+	}
+	if privilege.Groupname != "synocommunity" {
+		t.Fatalf("package group = %q, want synocommunity", privilege.Groupname)
+	}
+	wantRoot := map[string]bool{"postinst": false, "postupgrade": false}
+	for _, override := range privilege.CtrlScript {
+		if _, ok := wantRoot[override.Action]; !ok {
+			t.Errorf("unexpected lifecycle identity override for %s", override.Action)
+			continue
+		}
+		if override.RunAs != "root" {
+			t.Errorf("%s lifecycle identity = %q, want root", override.Action, override.RunAs)
+			continue
+		}
+		wantRoot[override.Action] = true
+	}
+	for action, found := range wantRoot {
+		if !found {
+			t.Errorf("privilege manifest does not run %s as root", action)
+		}
+	}
+}
+
+func TestSynologyOwnershipMigrationIsGuarded(t *testing.T) {
+	data, err := os.ReadFile("synology/spk/scripts/repair-ownership")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := string(data)
+	for _, marker := range []string{
+		`if [ "$(id -u)" -ne 0 ]; then`,
+		`id "$PACKAGE_USER"`,
+		`id -gn "$PACKAGE_USER"`,
+		`readlink -f "$logical_root"`,
+		`if [ -L "$logical_root" ]; then`,
+		`""|/)`,
+		`@appdata:/usr/local/packages/@appdata/${PACKAGE_NAME}`,
+		`@appconf:/usr/syno/etc/packages/${PACKAGE_NAME}`,
+		`@apphome:/usr/local/packages/@apphome/${PACKAGE_NAME}`,
+		`/volume${volume_name}/${storage_name}/${PACKAGE_NAME}`,
+		`chown -hR -P "${PACKAGE_USER}:${PACKAGE_GROUP}" "$resolved_root"`,
+		`repair_package_root "${PACKAGE_ROOT}/var" "@appdata"`,
+		`repair_package_root "${PACKAGE_ROOT}/etc" "@appconf"`,
+		`repair_package_root "${PACKAGE_ROOT}/home" "@apphome"`,
+	} {
+		if !strings.Contains(script, marker) {
+			t.Errorf("ownership migration is missing %q", marker)
+		}
+	}
+}
+
+func TestSynologyOwnershipMigrationValidatesExactDSMRoots(t *testing.T) {
+	helper := "synology/spk/scripts/repair-ownership"
+	tests := []struct {
+		name    string
+		root    string
+		storage string
+		valid   bool
+	}{
+		{name: "system appdata", root: "/usr/local/packages/@appdata/dnsacme", storage: "@appdata", valid: true},
+		{name: "system appconf", root: "/usr/syno/etc/packages/dnsacme", storage: "@appconf", valid: true},
+		{name: "system apphome", root: "/usr/local/packages/@apphome/dnsacme", storage: "@apphome", valid: true},
+		{name: "volume appdata", root: "/volume1/@appdata/dnsacme", storage: "@appdata", valid: true},
+		{name: "volume appconf", root: "/volume12/@appconf/dnsacme", storage: "@appconf", valid: true},
+		{name: "volume apphome", root: "/volume2/@apphome/dnsacme", storage: "@apphome", valid: true},
+		{name: "empty", root: "", storage: "@appdata", valid: false},
+		{name: "filesystem root", root: "/", storage: "@appdata", valid: false},
+		{name: "wrong package", root: "/usr/local/packages/@appdata/other", storage: "@appdata", valid: false},
+		{name: "wrong storage class", root: "/usr/local/packages/@appdata/dnsacme", storage: "@apphome", valid: false},
+		{name: "child path", root: "/volume1/@appdata/dnsacme/child", storage: "@appdata", valid: false},
+		{name: "non-numeric volume", root: "/volumeUSB1/@appdata/dnsacme", storage: "@appdata", valid: false},
+		{name: "numeric prefix only", root: "/volume1evil/@appdata/dnsacme", storage: "@appdata", valid: false},
+		{name: "lookalike tree", root: "/tmp/@appdata/dnsacme", storage: "@appdata", valid: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := exec.Command("sh", "-c", `. "$1"; validate_package_root "$2" "$3"`, "sh", helper, tt.root, tt.storage)
+			err := cmd.Run()
+			if tt.valid && err != nil {
+				t.Fatalf("valid DSM root rejected: %v", err)
+			}
+			if !tt.valid && err == nil {
+				t.Fatal("unsafe DSM root accepted")
+			}
+		})
+	}
+}
+
+func TestSynologyOwnershipMigrationRejectsDanglingRootSymlink(t *testing.T) {
+	tempDir := t.TempDir()
+	packageRoot := filepath.Join(tempDir, "package")
+	if err := os.Mkdir(packageRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	logicalRoot := filepath.Join(packageRoot, "var")
+	if err := os.Symlink(filepath.Join(tempDir, "missing-appdata"), logicalRoot); err != nil {
+		t.Fatal(err)
+	}
+
+	helper, err := filepath.Abs("synology/spk/scripts/repair-ownership")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("sh", "-c", `. "$1"; PACKAGE_ROOT=$2; repair_package_root "${PACKAGE_ROOT}/var" "@appdata"`, "sh", helper, packageRoot)
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatal("dangling package root symlink was accepted")
+	}
+	if !strings.Contains(string(output), "package root is a dangling symlink") {
+		t.Fatalf("unexpected dangling symlink error: %s", output)
+	}
+}
+
+func TestSynologyOwnershipMigrationResolvesRootAndUsesPhysicalChown(t *testing.T) {
+	tempDir := t.TempDir()
+	packageRoot := filepath.Join(tempDir, "package")
+	physicalRoot := filepath.Join(tempDir, "physical-appdata")
+	mockBin := filepath.Join(tempDir, "bin")
+	for _, path := range []string{packageRoot, physicalRoot, mockBin} {
+		if err := os.Mkdir(path, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Symlink(physicalRoot, filepath.Join(packageRoot, "var")); err != nil {
+		t.Fatal(err)
+	}
+	logicalRoot := filepath.Join(packageRoot, "var")
+	writeExecutable := func(name, body string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(mockBin, name), []byte(body), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeExecutable("id", "#!/bin/sh\ncase \"$1\" in\n  -u) echo 0 ;;\n  -gn) echo synocommunity ;;\n  *) exit 0 ;;\nesac\n")
+	writeExecutable("readlink", "#!/bin/sh\n[ \"$1\" = -f ] && [ \"$2\" = \"$LOGICAL_ROOT\" ] || exit 1\nprintf '%s\\n' /usr/local/packages/@appdata/dnsacme\n")
+	writeExecutable("chown", "#!/bin/sh\nprintf '%s\\n' \"$*\" > \"$CHOWN_LOG\"\n")
+
+	helper, err := filepath.Abs("synology/spk/scripts/repair-ownership")
+	if err != nil {
+		t.Fatal(err)
+	}
+	chownLog := filepath.Join(tempDir, "chown.log")
+	cmd := exec.Command("sh", "-c", `. "$1"; PACKAGE_ROOT=$2; repair_package_ownership`, "sh", helper, packageRoot)
+	cmd.Env = append(os.Environ(),
+		"PATH="+mockBin+":"+os.Getenv("PATH"),
+		"LOGICAL_ROOT="+logicalRoot,
+		"CHOWN_LOG="+chownLog,
+	)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("mock ownership migration failed: %v: %s", err, output)
+	}
+	logData, err := os.ReadFile(chownLog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "-hR -P sc-dnsacme:synocommunity /usr/local/packages/@appdata/dnsacme\n"
+	if string(logData) != want {
+		t.Fatalf("chown invocation = %q, want %q", logData, want)
+	}
+}
+
+func TestSynologyInstallAndUpgradeRepairOwnership(t *testing.T) {
+	for _, path := range []string{
+		"synology/spk/scripts/postinst",
+		"synology/spk/scripts/postupgrade",
+	} {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		script := string(data)
+		if !strings.Contains(script, `. "${SCRIPT_DIR}/repair-ownership"`) {
+			t.Errorf("%s does not source the ownership migration helper", path)
+		}
+		if !strings.Contains(script, "repair_package_ownership") {
+			t.Errorf("%s does not run ownership migration", path)
+		}
+	}
+
+	buildData, err := os.ReadFile("synology/build-spk.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	buildScript := string(buildData)
+	for _, name := range []string{"postinst", "postupgrade", "repair-ownership"} {
+		if !strings.Contains(buildScript, `scripts/`+name+`"`) {
+			t.Errorf("build script does not mark %s executable", name)
+		}
 	}
 }
 

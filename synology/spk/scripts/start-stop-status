@@ -39,7 +39,7 @@ start_daemon() {
   # before launching the daemon; otherwise 0600 certificate files would become
   # root-owned and unreadable after the next normal Package Center start.
   if [ "$(id -u)" -eq 0 ]; then
-    exec su -s /bin/sh dnsacme -c "/var/packages/dnsacme/scripts/start-stop-status start"
+    exec su -s /bin/sh sc-dnsacme -c "/var/packages/dnsacme/scripts/start-stop-status start"
   fi
   mkdir -p "$VAR" "$ETC"
   # Package Center may call start repeatedly; keep the existing live process
