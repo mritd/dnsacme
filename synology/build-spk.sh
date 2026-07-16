@@ -46,8 +46,7 @@ build_pkg() (
   cp -R "$ROOT/synology/spk/ui/." "$work/package/ui/"
 
   chmod +x "$work/package/scripts/start-stop-status"
-  chmod +x "$work/package/scripts/postinst" "$work/package/scripts/preupgrade"
-  chmod +x "$work/package/scripts/postupgrade" "$work/package/scripts/repair-ownership"
+  chmod +x "$work/package/scripts/preupgrade"
   chmod +x "$work/package/scripts/postuninst"
   chmod +x "$work/package/ui/api.cgi"
 

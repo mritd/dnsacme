@@ -113,6 +113,35 @@ WebAPI instead of modifying certificate files on disk.
 - acme.sh: [DSM WebAPI login](https://github.com/acmesh-official/acme.sh/blob/ebb5cc4981ac38994b124441ef38b961ef565f27/deploy/synology_dsm.sh#L228-L233), [certificate lookup and administrator permission check](https://github.com/acmesh-official/acme.sh/blob/ebb5cc4981ac38994b124441ef38b961ef565f27/deploy/synology_dsm.sh#L331-L349), and [certificate import](https://github.com/acmesh-official/acme.sh/blob/ebb5cc4981ac38994b124441ef38b961ef565f27/deploy/synology_dsm.sh#L364-L383).
 - DNSACME: [DSM WebAPI login](synology_deploy.go#L109-L139), [exact certificate lookup](synology_deploy.go#L246-L277), and [certificate import](synology_deploy.go#L159-L244).
 
+#### Repairing permissions after switching package sources
+
+The standalone SPK uses the same `sc-dnsacme:synocommunity` service identity as the
+SynoCommunity package. Older standalone releases used a different account, so retained
+configuration or certificate files may remain unreadable after switching between an old
+standalone package and a SynoCommunity package. DNSACME does not request root package
+hooks to modify these files automatically because DSM warns about and may reject such
+packages.
+
+If the package log reports `permission denied` after an upgrade, connect to DSM over SSH
+with an administrator account. First verify that these commands resolve only to the
+DNSACME package directories under `@appdata`, `@appconf`, and `@apphome`:
+
+```sh
+readlink -f /var/packages/dnsacme/var
+readlink -f /var/packages/dnsacme/etc
+readlink -f /var/packages/dnsacme/home
+```
+
+After checking the paths, repair their ownership and restart the package:
+
+```sh
+sudo chown -hR -P sc-dnsacme:synocommunity \
+  "$(readlink -f /var/packages/dnsacme/var)" \
+  "$(readlink -f /var/packages/dnsacme/etc)" \
+  "$(readlink -f /var/packages/dnsacme/home)"
+sudo /usr/syno/bin/synopkg restart dnsacme
+```
+
 The renewal daemon remains idle until **Apply** succeeds for the current configuration.
 Changing the domain, DNS credentials, DSM deployment target, or CA mode invalidates the
 previous Test and Apply results. Testing remains optional, while a successful production
