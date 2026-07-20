@@ -19,6 +19,18 @@ Build a package from the repository root:
 task synology
 ```
 
-It builds the common DSM targets: Go `amd64` with `GOAMD64=v2` maps to DSM
-`x86_64`, while Go `arm64` maps to DSM `aarch64`. Each SPK advertises only the
-architecture of the binary it contains.
+The first-party build intentionally produces only the common DSM targets: Go
+`amd64` with `GOAMD64=v2` maps to DSM `x86_64`, while Go `arm64` maps to DSM
+`aarch64`. Each SPK advertises only the architecture of the binary it contains.
+
+The SynoCommunity recipe can build additional packages from source for
+Go-supported 32-bit architectures. Verify that the Synology-tagged root package
+remains portable to `386`, ARMv5, ARMv7, `amd64` with `GOAMD64=v1`, and `arm64`
+with:
+
+```sh
+task synology-arch-check
+```
+
+This check uses temporary outputs and does not add SPKs or binaries to the
+repository `build` directory.

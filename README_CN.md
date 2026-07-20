@@ -80,6 +80,14 @@ task synology
 # build/dnsacme-synology-arm64.spk   aarch64
 ```
 
+项目自行构建的套件有意只提供常用的 `amd64` 和 `arm64` SPK。SynoCommunity 配方还可以从源码构建 Go 支持的其他 32 位架构套件。可以通过以下命令检查启用 Synology build tag 后的源码是否仍兼容 `386`、ARMv5、ARMv7、使用 `GOAMD64=v1` 的 `amd64`，以及 `arm64`：
+
+```sh
+task synology-arch-check
+```
+
+该检查使用临时输出，不会向 `build` 目录添加文件。
+
 请根据 NAS 架构，通过 **套件中心 > 手动安装** 安装对应的 SPK，也可以通过 SSH 安装：
 
 ```sh

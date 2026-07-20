@@ -83,6 +83,17 @@ task synology
 # build/dnsacme-synology-arm64.spk   aarch64
 ```
 
+The first-party build intentionally produces only the common `amd64` and `arm64`
+SPKs. The SynoCommunity recipe can build additional packages from source for
+Go-supported 32-bit architectures. Check that the Synology-tagged source remains
+portable to `386`, ARMv5, ARMv7, `amd64` with `GOAMD64=v1`, and `arm64` with:
+
+```sh
+task synology-arch-check
+```
+
+This check uses temporary outputs and does not add files to `build`.
+
 Install the SPK for your NAS architecture through **Package Center > Manual Install**
 or over SSH:
 

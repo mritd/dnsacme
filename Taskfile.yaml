@@ -160,10 +160,29 @@ tasks:
       - rm -rf build/synology
       - ./synology/build-spk.sh build
 
+  synology-arch-check:
+    desc: Check Synology-tagged builds across supported Go architectures
+    cmds:
+      - |
+        tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/dnsacme-synology-arch-check.XXXXXX")"
+        trap 'rm -rf "$tmp_dir"' EXIT
+
+        CGO_ENABLED=0 GOOS=linux GOARCH=386 GO386=sse2 \
+          go build -tags synology -trimpath -o "$tmp_dir/dnsacme-linux-386" .
+        CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=5 \
+          go build -tags synology -trimpath -o "$tmp_dir/dnsacme-linux-armv5" .
+        CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=7 \
+          go build -tags synology -trimpath -o "$tmp_dir/dnsacme-linux-armv7" .
+        CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1 \
+          go build -tags synology -trimpath -o "$tmp_dir/dnsacme-linux-amd64-v1" .
+        CGO_ENABLED=0 GOOS=linux GOARCH=arm64 GOARM64=v8.0 \
+          go build -tags synology -trimpath -o "$tmp_dir/dnsacme-linux-arm64" .
+
   release-build:
     desc: Build all release assets without tagging or publishing
     cmds:
       - task: clean
+      - task: synology-arch-check
       - task: linux-386
       - task: linux-amd64
       - task: linux-amd64-v3
