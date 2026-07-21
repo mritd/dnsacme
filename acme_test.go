@@ -10,6 +10,7 @@ import (
 
 	"github.com/caddyserver/certmagic"
 	"github.com/libdns/libdns"
+	"github.com/mritd/dnsacme/internal/provider"
 )
 
 type fakeDNSProvider struct{}
@@ -23,31 +24,31 @@ func (fakeDNSProvider) DeleteRecords(ctx context.Context, zone string, recs []li
 }
 
 func TestDNSProviderForConfig(t *testing.T) {
-	old := providerFn["fake"]
-	providerFn["fake"] = func(conf *Config) (certmagic.DNSProvider, error) {
-		if conf.Email != "ops@example.com" {
-			t.Fatalf("provider received wrong config: %#v", conf)
+	oldNewDNSProvider := newDNSProvider
+	defer func() { newDNSProvider = oldNewDNSProvider }()
+
+	credentials := map[string]string{"token": "value"}
+	newDNSProvider = func(name string, config map[string]string) (certmagic.DNSProvider, error) {
+		if name != "FAKE" {
+			t.Fatalf("provider received wrong name: %q", name)
+		}
+		if config["token"] != "value" {
+			t.Fatalf("provider received wrong config: %#v", config)
 		}
 		return fakeDNSProvider{}, nil
 	}
-	defer func() {
-		if old == nil {
-			delete(providerFn, "fake")
-			return
-		}
-		providerFn["fake"] = old
-	}()
 
-	provider, err := dnsProviderForConfig(&Config{DNSProvider: "FAKE", Email: "ops@example.com"})
+	dnsProvider, err := dnsProviderForConfig(&Config{DNSProvider: "FAKE", DNSConfig: credentials})
 	if err != nil {
 		t.Fatalf("dnsProviderForConfig returned error: %v", err)
 	}
-	if provider == nil {
+	if dnsProvider == nil {
 		t.Fatal("dnsProviderForConfig returned nil provider")
 	}
 
-	if _, err := dnsProviderForConfig(&Config{DNSProvider: "missing"}); err == nil {
-		t.Fatal("expected unsupported provider error")
+	newDNSProvider = provider.New
+	if _, err := dnsProviderForConfig(&Config{DNSProvider: "Missing"}); err == nil || err.Error() != "unsupported DNS provider: Missing" {
+		t.Fatalf("unexpected unsupported provider error: %v", err)
 	}
 }
 
@@ -62,7 +63,7 @@ func TestNewACMEIssuerSelectsCAAndEAB(t *testing.T) {
 		EABHMACKey:  "mac",
 		StorageDir:  t.TempDir(),
 		KeyType:     "p384",
-		DNSProvider: "cloudflare",
+		DNSProvider: provider.Cloudflare,
 	}, magic, fakeDNSProvider{}, logger)
 
 	if issuer.CA != certmagic.ZeroSSLProductionCA {
@@ -129,8 +130,8 @@ func TestCertMagicConfigAndManagedConfig(t *testing.T) {
 		KeyType:       "rsa2048",
 		StorageDir:    t.TempDir(),
 		ObtainedHook:  "",
-		DNSProvider:   "cloudflare",
-		DNSConfig:     map[string]string{ENV_CLOUDFLARE_API_TOKEN: "token"},
+		DNSProvider:   provider.Cloudflare,
+		DNSConfig:     map[string]string{provider.CloudflareAPIToken: "token"},
 		Domains:       []string{"example.com"},
 		Email:         "ops@example.com",
 		ObtainingHook: "",
@@ -164,17 +165,14 @@ func TestCertMagicConfigAndManagedConfig(t *testing.T) {
 }
 
 func TestObtainUsesInjectedRuntime(t *testing.T) {
-	oldProvider := providerFn["fake-obtain"]
-	providerFn["fake-obtain"] = func(conf *Config) (certmagic.DNSProvider, error) {
+	oldNewDNSProvider := newDNSProvider
+	newDNSProvider = func(name string, config map[string]string) (certmagic.DNSProvider, error) {
+		if name != "fake-obtain" {
+			t.Fatalf("provider received wrong name: %q", name)
+		}
 		return fakeDNSProvider{}, nil
 	}
-	defer func() {
-		if oldProvider == nil {
-			delete(providerFn, "fake-obtain")
-			return
-		}
-		providerFn["fake-obtain"] = oldProvider
-	}()
+	defer func() { newDNSProvider = oldNewDNSProvider }()
 
 	oldSignal := signalNotifyContext
 	oldManage := manageCertificates

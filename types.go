@@ -37,10 +37,3 @@ type Config struct {
 
 	keyType certmagic.KeyType
 }
-
-// Providers implements sort.Interface for provider names.
-type Providers []string
-
-func (p Providers) Len() int           { return len(p) }
-func (p Providers) Less(i, j int) bool { return p[i] < p[j] }
-func (p Providers) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }

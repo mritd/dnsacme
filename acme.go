@@ -16,6 +16,7 @@ import (
 
 	"github.com/caddyserver/certmagic"
 	"github.com/mholt/acmez/v3/acme"
+	"github.com/mritd/dnsacme/internal/provider"
 	"github.com/sirupsen/logrus"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -24,6 +25,7 @@ import (
 var (
 	httpClientDo        = http.DefaultClient.Do
 	signalNotifyContext = signal.NotifyContext
+	newDNSProvider      = provider.New
 	manageCertificates  = func(ctx context.Context, cfg *certmagic.Config, domains []string) error {
 		return cfg.ManageSync(ctx, domains)
 	}
@@ -93,11 +95,9 @@ func startACMEManagement(ctx context.Context, conf *Config, emitHooks bool) (fun
 	return cache.Stop, nil
 }
 
+// dnsProviderForConfig constructs the configured provider through the testable package seam.
 func dnsProviderForConfig(conf *Config) (certmagic.DNSProvider, error) {
-	if fn, ok := providerFn[strings.ToLower(conf.DNSProvider)]; ok {
-		return fn(conf)
-	}
-	return nil, fmt.Errorf("unsupported DNS provider: %s", conf.DNSProvider)
+	return newDNSProvider(conf.DNSProvider, conf.DNSConfig)
 }
 
 func newACMELogger() *zap.Logger {

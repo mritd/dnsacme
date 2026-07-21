@@ -9,12 +9,12 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/caddyserver/certmagic"
+	"github.com/mritd/dnsacme/internal/provider"
 	"gopkg.in/yaml.v3"
 )
 
@@ -105,22 +105,6 @@ type SynologyOperationState struct {
 	Message    string    `json:"message,omitempty" yaml:"message,omitempty"`
 }
 
-// ProviderField describes one dynamic DNS credential field for the DSM UI.
-type ProviderField struct {
-	Key         string `json:"key"`
-	Label       string `json:"label"`
-	Secret      bool   `json:"secret"`
-	Required    bool   `json:"required"`
-	Placeholder string `json:"placeholder,omitempty"`
-}
-
-// ProviderMetadata is the UI and validation schema for a supported provider.
-type ProviderMetadata struct {
-	Name   string          `json:"name"`
-	Label  string          `json:"label"`
-	Fields []ProviderField `json:"fields"`
-}
-
 // defaultSynologyConfig returns safe package defaults without pre-populating any
 // user-controlled certificate, account, or credential value.
 func defaultSynologyConfig() SynologyConfig {
@@ -130,7 +114,7 @@ func defaultSynologyConfig() SynologyConfig {
 			CA:      "letsencrypt",
 		},
 		DNS: SynologyDNSConfig{
-			Provider: DNS_PROVIDER_CLOUDFLARE,
+			Provider: provider.Default(),
 			Config:   map[string]string{},
 		},
 		Synology: SynologyDeployConfig{
@@ -422,7 +406,7 @@ func cloneStringMap(in map[string]string) map[string]string {
 }
 
 func isSecretProviderKey(key string) bool {
-	if field, ok := providerFieldByKey(key); ok {
+	if field, ok := provider.FieldByKey(key); ok {
 		return field.Secret
 	}
 	// Unknown provider fields still receive conservative name-based redaction.
@@ -435,71 +419,8 @@ func isSecretProviderKey(key string) bool {
 }
 
 func isRequiredProviderKey(key string) bool {
-	if field, ok := providerFieldByKey(key); ok {
+	if field, ok := provider.FieldByKey(key); ok {
 		return field.Required
 	}
 	return false
-}
-
-func providerFieldByKey(key string) (ProviderField, bool) {
-	for _, provider := range providerMetadata() {
-		for _, field := range provider.Fields {
-			if field.Key == key {
-				return field, true
-			}
-		}
-	}
-	return ProviderField{}, false
-}
-
-// providerMetadata is the manually maintained schema shared by rendering,
-// required-value handling, and redaction. Keep keys synchronized with consts.go;
-// Cloudflare stays first because the UI uses the first item as its fallback.
-func providerMetadata() []ProviderMetadata {
-	items := []ProviderMetadata{
-		{Name: DNS_PROVIDER_CLOUDFLARE, Label: "Cloudflare", Fields: []ProviderField{
-			{Key: ENV_CLOUDFLARE_API_TOKEN, Label: "API Token", Secret: true, Required: true, Placeholder: "Zone DNS edit token"},
-		}},
-		{Name: DNS_PROVIDER_ALIDNS, Label: "AliDNS", Fields: []ProviderField{
-			{Key: ENV_ALIDNS_ACCKEYID, Label: "AccessKey ID", Required: true, Placeholder: "LTAI..."},
-			{Key: ENV_ALIDNS_ACCKEYSECRET, Label: "AccessKey Secret", Secret: true, Required: true},
-			{Key: ENV_ALIDNS_REGIONID, Label: "Region ID", Placeholder: "cn-hangzhou"},
-		}},
-		{Name: DNS_PROVIDER_AZURE, Label: "Azure DNS", Fields: []ProviderField{
-			{Key: ENV_AZURE_TENANTID, Label: "Tenant ID", Required: true},
-			{Key: ENV_AZURE_CLIENTID, Label: "Client ID", Required: true},
-			{Key: ENV_AZURE_CLIENTSECRET, Label: "Client Secret", Secret: true, Required: true},
-			{Key: ENV_AZURE_SUBSCRIPTIONID, Label: "Subscription ID", Required: true},
-			{Key: ENV_AZURE_RESOURCEGROUPNAME, Label: "Resource Group", Required: true},
-		}},
-		{Name: DNS_PROVIDER_DUCKDNS, Label: "Duck DNS", Fields: []ProviderField{
-			{Key: ENV_DUCKDNS_API_TOKEN, Label: "API Token", Secret: true, Required: true, Placeholder: "duckdns token"},
-			{Key: ENV_DUCKDNS_OVERRIDE_DOMAIN, Label: "Override Domain"},
-		}},
-		{Name: DNS_PROVIDER_GANDI, Label: "Gandi", Fields: []ProviderField{
-			{Key: ENV_GANDI_API_TOKEN, Label: "API Token", Secret: true, Required: true, Placeholder: "Personal Access Token"},
-		}},
-		{Name: DNS_PROVIDER_GODADDY, Label: "GoDaddy", Fields: []ProviderField{
-			{Key: ENV_GODADDY_API_TOKEN, Label: "API Token", Secret: true, Required: true, Placeholder: "key:secret"},
-		}},
-		{Name: DNS_PROVIDER_HUAWEICLOUD, Label: "Huawei Cloud DNS", Fields: []ProviderField{
-			{Key: ENV_HUAWEICLOUD_ACCKEYID, Label: "AccessKey ID", Required: true, Placeholder: "access key id"},
-			{Key: ENV_HUAWEICLOUD_ACCKEYSECRET, Label: "Secret AccessKey", Secret: true, Required: true},
-			{Key: ENV_HUAWEICLOUD_REGIONID, Label: "Region ID", Placeholder: "cn-south-1"},
-		}},
-		{Name: DNS_PROVIDER_TENCENTCLOUD, Label: "Tencent Cloud DNS", Fields: []ProviderField{
-			{Key: ENV_TENCENTCLOUD_ACCKEYID, Label: "Secret ID", Required: true, Placeholder: "AKID..."},
-			{Key: ENV_TENCENTCLOUD_ACCKEYSECRET, Label: "Secret Key", Secret: true, Required: true},
-		}},
-	}
-	sort.Slice(items, func(i, j int) bool {
-		if items[i].Name == DNS_PROVIDER_CLOUDFLARE {
-			return true
-		}
-		if items[j].Name == DNS_PROVIDER_CLOUDFLARE {
-			return false
-		}
-		return items[i].Name < items[j].Name
-	})
-	return items
 }

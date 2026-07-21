@@ -225,17 +225,19 @@ go build -tags synology
 ### DNS Config
 
 Currently dnsacme supports 8 DNS providers (theoretically more, and some have not been added yet),
-the providers supported by the `--dns` option can be viewed from here (`DNS_PROVIDER_*`): [consts.go](https://github.com/mritd/dnsacme/blob/main/consts.go)
+the providers supported by the `--dns` option are defined in [internal/provider/provider.go](https://github.com/mritd/dnsacme/blob/main/internal/provider/provider.go):
 
-```sh
-DNS_PROVIDER_ALIDNS = "alidns"
-DNS_PROVIDER_AZURE = "azure"
-DNS_PROVIDER_CLOUDFLARE = "cloudflare"
-DNS_PROVIDER_DUCKDNS = "duckdns"
-DNS_PROVIDER_GANDI = "gandi"
-DNS_PROVIDER_GODADDY = "godaddy"
-DNS_PROVIDER_HUAWEICLOUD = "huaweicloud"
-DNS_PROVIDER_TENCENTCLOUD = "tencentcloud"
+```go
+const (
+    AliDNS       = "alidns"
+    Azure        = "azure"
+    Cloudflare   = "cloudflare"
+    DuckDNS      = "duckdns"
+    Gandi        = "gandi"
+    GoDaddy      = "godaddy"
+    HuaweiCloud  = "huaweicloud"
+    TencentCloud = "tencentcloud"
+)
 ```
 
 For each DNS provider has different configuration, the `--dns-config` option can be specified multiple times:
@@ -244,27 +246,29 @@ For each DNS provider has different configuration, the `--dns-config` option can
 dnsacme --dns alidns --dns-config=ALIDNS_ACCKEYID=xxxxxx --dns-config=ALIDNS_ACCKEYSECRET=xxxxxx ...
 ```
 
-The configuration variable Key of each DNS provider can also be found in [consts.go](https://github.com/mritd/dnsacme/blob/main/consts.go):
+The configuration keys for each DNS provider are defined in [internal/provider/provider.go](https://github.com/mritd/dnsacme/blob/main/internal/provider/provider.go):
 
-```sh
-ENV_ALIDNS_ACCKEYID = "ALIDNS_ACCKEYID"
-ENV_ALIDNS_ACCKEYSECRET = "ALIDNS_ACCKEYSECRET"
-ENV_ALIDNS_REGIONID = "ALIDNS_REGIONID"
-ENV_AZURE_TENANTID = "AZURE_TENANTID"
-ENV_AZURE_CLIENTID = "AZURE_CLIENTID"
-ENV_AZURE_CLIENTSECRET = "AZURE_CLIENTSECRET"
-ENV_AZURE_SUBSCRIPTIONID = "AZURE_SUBSCRIPTIONID"
-ENV_AZURE_RESOURCEGROUPNAME = "AZURE_RESOURCEGROUPNAME"
-ENV_GANDI_API_TOKEN = "GANDI_API_TOKEN"
-ENV_CLOUDFLARE_API_TOKEN = "CLOUDFLARE_API_TOKEN"
-ENV_GODADDY_API_TOKEN = "GODADDY_API_TOKEN"
-ENV_DUCKDNS_API_TOKEN = "DUCKDNS_API_TOKEN"
-ENV_DUCKDNS_OVERRIDE_DOMAIN = "DUCKDNS_OVERRIDE_DOMAIN"
-ENV_HUAWEICLOUD_ACCKEYID = "HUAWEICLOUD_ACCKEYID"
-ENV_HUAWEICLOUD_ACCKEYSECRET = "HUAWEICLOUD_ACCKEYSECRET"
-ENV_HUAWEICLOUD_REGIONID = "HUAWEICLOUD_REGIONID"
-ENV_TENCENTCLOUD_ACCKEYID = "TENCENTCLOUD_ACCKEYID"
-ENV_TENCENTCLOUD_ACCKEYSECRET = "TENCENTCLOUD_ACCKEYSECRET"
+```go
+const (
+    AliDNSAccessKeyID           = "ALIDNS_ACCKEYID"
+    AliDNSAccessKeySecret       = "ALIDNS_ACCKEYSECRET"
+    AliDNSRegionID              = "ALIDNS_REGIONID"
+    AzureTenantID               = "AZURE_TENANTID"
+    AzureClientID               = "AZURE_CLIENTID"
+    AzureClientSecret           = "AZURE_CLIENTSECRET"
+    AzureSubscriptionID         = "AZURE_SUBSCRIPTIONID"
+    AzureResourceGroupName      = "AZURE_RESOURCEGROUPNAME"
+    GandiAPIToken               = "GANDI_API_TOKEN"
+    CloudflareAPIToken          = "CLOUDFLARE_API_TOKEN"
+    GoDaddyAPIToken             = "GODADDY_API_TOKEN"
+    DuckDNSAPIToken             = "DUCKDNS_API_TOKEN"
+    DuckDNSOverrideDomain       = "DUCKDNS_OVERRIDE_DOMAIN"
+    HuaweiCloudAccessKeyID      = "HUAWEICLOUD_ACCKEYID"
+    HuaweiCloudAccessKeySecret  = "HUAWEICLOUD_ACCKEYSECRET"
+    HuaweiCloudRegionID         = "HUAWEICLOUD_REGIONID"
+    TencentCloudAccessKeyID     = "TENCENTCLOUD_ACCKEYID"
+    TencentCloudAccessKeySecret = "TENCENTCLOUD_ACCKEYSECRET"
+)
 ```
 
 **Currently, I don't use all DNS providers, so the configuration for some DNS providers is not verified in the code;**

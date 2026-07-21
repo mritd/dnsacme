@@ -19,11 +19,13 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/caddyserver/certmagic"
+	"github.com/mritd/dnsacme/internal/provider"
 )
 
 func TestSynologyConfigDefaultsSaveLoadAndHash(t *testing.T) {
@@ -32,13 +34,13 @@ func TestSynologyConfigDefaultsSaveLoadAndHash(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.DNS.Provider != DNS_PROVIDER_CLOUDFLARE {
+	if cfg.DNS.Provider != provider.Default() {
 		t.Fatalf("unexpected default provider: %s", cfg.DNS.Provider)
 	}
 
 	cfg.ACME.Domains = []string{" example.com ", "", "*.example.com", "example.com"}
 	cfg.ACME.Email = "admin@example.com"
-	cfg.DNS.Config[ENV_CLOUDFLARE_API_TOKEN] = "secret-token"
+	cfg.DNS.Config[provider.CloudflareAPIToken] = "secret-token"
 	if err := saveSynologyConfig(path, cfg); err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +117,7 @@ func TestNormalizeSynologyConfigFillsDefaults(t *testing.T) {
 	cfg := normalizeSynologyConfig(SynologyConfig{})
 	if cfg.ACME.KeyType != "rsa4096" ||
 		cfg.ACME.CA != "letsencrypt" ||
-		cfg.DNS.Provider != DNS_PROVIDER_CLOUDFLARE ||
+		cfg.DNS.Provider != provider.Default() ||
 		cfg.Synology.Scheme != "https" ||
 		cfg.Synology.Port != 5001 ||
 		cfg.Runtime.StorageDir == "" ||
@@ -191,13 +193,22 @@ func TestConfigHashKeepsLegacyProductionShape(t *testing.T) {
 }
 
 func TestProviderMetadataAndRedaction(t *testing.T) {
-	meta := providerMetadata()
-	if len(meta) == 0 || meta[0].Name != DNS_PROVIDER_CLOUDFLARE {
+	meta := provider.Definitions()
+	if len(meta) == 0 {
+		return
+	}
+	if meta[0].Name != provider.Default() {
+		t.Fatalf("default provider should be first: %+v", meta)
+	}
+	if provider.Default() != provider.Cloudflare {
+		t.Skip("full redaction compatibility assertions require Cloudflare")
+	}
+	if meta[0].Name != provider.Cloudflare {
 		t.Fatalf("Cloudflare should be the first provider: %+v", meta)
 	}
 	var foundToken bool
 	for _, field := range meta[0].Fields {
-		if field.Key == ENV_CLOUDFLARE_API_TOKEN && field.Secret && field.Required {
+		if field.Key == provider.CloudflareAPIToken && field.Secret && field.Required {
 			foundToken = true
 		}
 	}
@@ -208,28 +219,124 @@ func TestProviderMetadataAndRedaction(t *testing.T) {
 	cfg := validSynologyConfig(t.TempDir())
 	cfg.Synology.Password = "dsm-password"
 	redacted := cfg.Redacted()
-	if redacted.DNS.Config[ENV_CLOUDFLARE_API_TOKEN] != "********" {
+	if redacted.DNS.Config[provider.CloudflareAPIToken] != "********" {
 		t.Fatal("expected DNS token redaction")
 	}
 	if redacted.Synology.Password != "********" {
 		t.Fatal("expected DSM password redaction")
 	}
+	if _, ok := provider.FieldByKey(provider.AliDNSAccessKeyID); !ok {
+		return
+	}
 
-	cfg.DNS.Provider = DNS_PROVIDER_ALIDNS
+	cfg.DNS.Provider = provider.AliDNS
 	cfg.DNS.Config = map[string]string{
-		ENV_ALIDNS_ACCKEYID:     "LTAI1234567890",
-		ENV_ALIDNS_ACCKEYSECRET: "secret-value",
-		ENV_ALIDNS_REGIONID:     "cn-hangzhou",
+		provider.AliDNSAccessKeyID:     "LTAI1234567890",
+		provider.AliDNSAccessKeySecret: "secret-value",
+		provider.AliDNSRegionID:        "cn-hangzhou",
 	}
 	redacted = cfg.Redacted()
-	if redacted.DNS.Config[ENV_ALIDNS_ACCKEYID] != "LTAI1234567890" {
-		t.Fatalf("AliDNS AccessKey ID should not be redacted: %q", redacted.DNS.Config[ENV_ALIDNS_ACCKEYID])
+	if redacted.DNS.Config[provider.AliDNSAccessKeyID] != "LTAI1234567890" {
+		t.Fatalf("AliDNS AccessKey ID should not be redacted: %q", redacted.DNS.Config[provider.AliDNSAccessKeyID])
 	}
-	if redacted.DNS.Config[ENV_ALIDNS_ACCKEYSECRET] != "********" {
+	if redacted.DNS.Config[provider.AliDNSAccessKeySecret] != "********" {
 		t.Fatal("AliDNS AccessKey Secret should be redacted")
 	}
-	if redacted.DNS.Config[ENV_ALIDNS_REGIONID] != "cn-hangzhou" {
-		t.Fatalf("AliDNS Region ID should not be redacted: %q", redacted.DNS.Config[ENV_ALIDNS_REGIONID])
+	if redacted.DNS.Config[provider.AliDNSRegionID] != "cn-hangzhou" {
+		t.Fatalf("AliDNS Region ID should not be redacted: %q", redacted.DNS.Config[provider.AliDNSRegionID])
+	}
+}
+
+func TestProviderMetadata_CompleteCatalog(t *testing.T) {
+	want := expectedProviderDefinitions()
+	if len(provider.Definitions()) != len(want) {
+		t.Skip("complete catalog compatibility requires a non-slim build")
+	}
+	if got := provider.Definitions(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("provider definitions = %#v, want %#v", got, want)
+	}
+	if provider.DefaultName != provider.Cloudflare {
+		t.Fatalf("default provider = %q, want %q", provider.DefaultName, provider.Cloudflare)
+	}
+	for _, definition := range want {
+		for _, field := range definition.Fields {
+			got, ok := provider.FieldByKey(field.Key)
+			if !ok || !reflect.DeepEqual(got, field) {
+				t.Fatalf("FieldByKey(%q) = %#v, %v, want %#v", field.Key, got, ok, field)
+			}
+		}
+	}
+}
+
+func TestCGIMetadata_JSONCompatibility(t *testing.T) {
+	var out bytes.Buffer
+	if err := serveSynologyCGI(
+		context.Background(),
+		filepath.Join(t.TempDir(), "config.yaml"),
+		queryEnv("action=metadata", http.MethodGet),
+		strings.NewReader(""),
+		&out,
+	); err != nil {
+		t.Fatal(err)
+	}
+	resp := parseCGIResponse(t, out.String())
+	if len(provider.Definitions()) == 0 {
+		if resp.Success || !strings.Contains(resp.Error, "no DNS providers") {
+			t.Fatalf("empty provider catalog response = %+v", resp)
+		}
+		return
+	}
+	if !resp.Success {
+		t.Fatalf("metadata CGI failed: %s", resp.Error)
+	}
+	if len(provider.Definitions()) != len(expectedProviderDefinitions()) {
+		t.Skip("complete catalog compatibility requires a non-slim build")
+	}
+	want, err := json.Marshal(map[string]any{"providers": expectedProviderDefinitions()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(resp.Data, want) {
+		t.Fatalf("metadata JSON = %s, want %s", resp.Data, want)
+	}
+}
+
+func expectedProviderDefinitions() []provider.Definition {
+	return []provider.Definition{
+		{Name: provider.Cloudflare, Label: "Cloudflare", Fields: []provider.Field{
+			{Key: provider.CloudflareAPIToken, Label: "API Token", Secret: true, Required: true, Placeholder: "Zone DNS edit token"},
+		}},
+		{Name: provider.AliDNS, Label: "AliDNS", Fields: []provider.Field{
+			{Key: provider.AliDNSAccessKeyID, Label: "AccessKey ID", Required: true, Placeholder: "LTAI..."},
+			{Key: provider.AliDNSAccessKeySecret, Label: "AccessKey Secret", Secret: true, Required: true},
+			{Key: provider.AliDNSRegionID, Label: "Region ID", Placeholder: "cn-hangzhou"},
+		}},
+		{Name: provider.Azure, Label: "Azure DNS", Fields: []provider.Field{
+			{Key: provider.AzureTenantID, Label: "Tenant ID", Required: true},
+			{Key: provider.AzureClientID, Label: "Client ID", Required: true},
+			{Key: provider.AzureClientSecret, Label: "Client Secret", Secret: true, Required: true},
+			{Key: provider.AzureSubscriptionID, Label: "Subscription ID", Required: true},
+			{Key: provider.AzureResourceGroupName, Label: "Resource Group", Required: true},
+		}},
+		{Name: provider.DuckDNS, Label: "Duck DNS", Fields: []provider.Field{
+			{Key: provider.DuckDNSAPIToken, Label: "API Token", Secret: true, Required: true, Placeholder: "duckdns token"},
+			{Key: provider.DuckDNSOverrideDomain, Label: "Override Domain"},
+		}},
+		{Name: provider.Gandi, Label: "Gandi", Fields: []provider.Field{
+			{Key: provider.GandiAPIToken, Label: "API Token", Secret: true, Required: true, Placeholder: "Personal Access Token"},
+		}},
+		{Name: provider.GoDaddy, Label: "GoDaddy", Fields: []provider.Field{
+			{Key: provider.GoDaddyAPIToken, Label: "API Token", Secret: true, Required: true, Placeholder: "key:secret"},
+		}},
+		{Name: provider.HuaweiCloud, Label: "Huawei Cloud DNS", Fields: []provider.Field{
+			{Key: provider.HuaweiCloudAccessKeyID, Label: "AccessKey ID", Required: true, Placeholder: "access key id"},
+			{Key: provider.HuaweiCloudAccessKeySecret, Label: "Secret AccessKey", Secret: true, Required: true},
+			{Key: provider.HuaweiCloudRegionID, Label: "Region ID", Placeholder: "cn-south-1"},
+		}},
+		{Name: provider.TencentCloud, Label: "Tencent Cloud DNS", Fields: []provider.Field{
+			{Key: provider.TencentCloudAccessKeyID, Label: "Secret ID", Required: true, Placeholder: "AKID..."},
+			{Key: provider.TencentCloudAccessKeySecret, Label: "Secret Key", Secret: true, Required: true},
+		}},
 	}
 }
 
@@ -243,8 +350,8 @@ func TestMergeSecretsPreservesMaskedValues(t *testing.T) {
 	if merged.Synology.Password != "old-password" {
 		t.Fatalf("masked DSM password was not preserved: %q", merged.Synology.Password)
 	}
-	if merged.DNS.Config[ENV_CLOUDFLARE_API_TOKEN] != "cf-token" {
-		t.Fatalf("masked DNS token was not preserved: %q", merged.DNS.Config[ENV_CLOUDFLARE_API_TOKEN])
+	if merged.DNS.Config[provider.CloudflareAPIToken] != "cf-token" {
+		t.Fatalf("masked DNS token was not preserved: %q", merged.DNS.Config[provider.CloudflareAPIToken])
 	}
 	if merged.ACME.Email != "new@example.com" {
 		t.Fatalf("non-secret field was not updated: %q", merged.ACME.Email)
@@ -257,35 +364,35 @@ func TestMergeSecretsPreservesMaskedValues(t *testing.T) {
 	}
 
 	next = current.Redacted()
-	next.DNS.Config[ENV_CLOUDFLARE_API_TOKEN] = ""
+	next.DNS.Config[provider.CloudflareAPIToken] = ""
 	next.Synology.Password = ""
 	merged = mergeSecrets(next, current)
-	if merged.DNS.Config[ENV_CLOUDFLARE_API_TOKEN] != "cf-token" {
-		t.Fatalf("blank DNS secret should preserve stored value: %q", merged.DNS.Config[ENV_CLOUDFLARE_API_TOKEN])
+	if merged.DNS.Config[provider.CloudflareAPIToken] != "cf-token" {
+		t.Fatalf("blank DNS secret should preserve stored value: %q", merged.DNS.Config[provider.CloudflareAPIToken])
 	}
 	if merged.Synology.Password != "old-password" {
 		t.Fatalf("blank DSM password should preserve stored value: %q", merged.Synology.Password)
 	}
 
-	current.DNS.Provider = DNS_PROVIDER_ALIDNS
+	current.DNS.Provider = provider.AliDNS
 	current.DNS.Config = map[string]string{
-		ENV_ALIDNS_ACCKEYID:     "stored-id",
-		ENV_ALIDNS_ACCKEYSECRET: "stored-secret",
-		ENV_ALIDNS_REGIONID:     "stored-region",
+		provider.AliDNSAccessKeyID:     "stored-id",
+		provider.AliDNSAccessKeySecret: "stored-secret",
+		provider.AliDNSRegionID:        "stored-region",
 	}
 	next = current.Redacted()
-	next.DNS.Config[ENV_ALIDNS_ACCKEYID] = ""
-	next.DNS.Config[ENV_ALIDNS_ACCKEYSECRET] = ""
-	next.DNS.Config[ENV_ALIDNS_REGIONID] = ""
+	next.DNS.Config[provider.AliDNSAccessKeyID] = ""
+	next.DNS.Config[provider.AliDNSAccessKeySecret] = ""
+	next.DNS.Config[provider.AliDNSRegionID] = ""
 	merged = mergeSecrets(next, current)
-	if merged.DNS.Config[ENV_ALIDNS_ACCKEYID] != "stored-id" {
-		t.Fatalf("blank required AliDNS AccessKey ID should preserve stored value: %q", merged.DNS.Config[ENV_ALIDNS_ACCKEYID])
+	if merged.DNS.Config[provider.AliDNSAccessKeyID] != "stored-id" {
+		t.Fatalf("blank required AliDNS AccessKey ID should preserve stored value: %q", merged.DNS.Config[provider.AliDNSAccessKeyID])
 	}
-	if merged.DNS.Config[ENV_ALIDNS_ACCKEYSECRET] != "stored-secret" {
-		t.Fatalf("blank AliDNS secret should preserve stored value: %q", merged.DNS.Config[ENV_ALIDNS_ACCKEYSECRET])
+	if merged.DNS.Config[provider.AliDNSAccessKeySecret] != "stored-secret" {
+		t.Fatalf("blank AliDNS secret should preserve stored value: %q", merged.DNS.Config[provider.AliDNSAccessKeySecret])
 	}
-	if merged.DNS.Config[ENV_ALIDNS_REGIONID] != "" {
-		t.Fatalf("blank optional AliDNS Region ID should be allowed, got %q", merged.DNS.Config[ENV_ALIDNS_REGIONID])
+	if merged.DNS.Config[provider.AliDNSRegionID] != "" {
+		t.Fatalf("blank optional AliDNS Region ID should be allowed, got %q", merged.DNS.Config[provider.AliDNSRegionID])
 	}
 }
 
@@ -323,13 +430,13 @@ func TestMergeSecrets_GuardsEmptyStored(t *testing.T) {
 	current.Synology.Password = ""
 	next := defaultSynologyConfig()
 	next.Synology.Password = "********"
-	next.DNS.Config[ENV_CLOUDFLARE_API_TOKEN] = "********"
+	next.DNS.Config[provider.CloudflareAPIToken] = "********"
 	got := mergeSecrets(next, current)
 	if got.Synology.Password != "" {
 		t.Errorf("password sentinel must not become a stored password, got %q", got.Synology.Password)
 	}
-	if got.DNS.Config[ENV_CLOUDFLARE_API_TOKEN] != "" {
-		t.Errorf("DNS sentinel must not become a stored token, got %q", got.DNS.Config[ENV_CLOUDFLARE_API_TOKEN])
+	if got.DNS.Config[provider.CloudflareAPIToken] != "" {
+		t.Errorf("DNS sentinel must not become a stored token, got %q", got.DNS.Config[provider.CloudflareAPIToken])
 	}
 
 	current.Synology.Password = "real"
@@ -1225,7 +1332,7 @@ func validSynologyConfig(dir string) SynologyConfig {
 	cfg := defaultSynologyConfig()
 	cfg.ACME.Domains = []string{"example.com"}
 	cfg.ACME.Email = "admin@example.com"
-	cfg.DNS.Config[ENV_CLOUDFLARE_API_TOKEN] = "cf-token"
+	cfg.DNS.Config[provider.CloudflareAPIToken] = "cf-token"
 	cfg.Synology.Account = "admin"
 	cfg.Synology.Password = "password"
 	cfg.Synology.CertificateDesc = "DNSACME"
@@ -1393,7 +1500,7 @@ func setSynologyTestServer(t *testing.T, cfg *SynologyConfig) {
 
 func assertTaskResultRedacted(t *testing.T, result synologyTaskResult) {
 	t.Helper()
-	if got := result.Config.DNS.Config[ENV_CLOUDFLARE_API_TOKEN]; got != "********" {
+	if got := result.Config.DNS.Config[provider.CloudflareAPIToken]; got != "********" {
 		t.Fatalf("task result leaked DNS token: %q", got)
 	}
 	if got := result.Config.Synology.Password; got != "********" {

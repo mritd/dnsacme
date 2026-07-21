@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mritd/dnsacme/internal/provider"
 	"github.com/spf13/cobra"
 )
 
@@ -102,7 +103,12 @@ func serveSynologyCGI(ctx context.Context, configPath string, getenv cgiEnv, inp
 	case "reconfigure":
 		payload, err = cgiReconfigure(method, configPath)
 	case "metadata":
-		payload = map[string]any{"providers": providerMetadata()}
+		definitions := provider.Definitions()
+		if len(definitions) == 0 {
+			err = errors.New("no DNS providers were compiled into this binary")
+			break
+		}
+		payload = map[string]any{"providers": definitions}
 	case "status":
 		payload, err = cgiStatus(configPath)
 	case "logs":

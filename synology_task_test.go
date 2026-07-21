@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/mritd/dnsacme/internal/provider"
 )
 
 func TestRunSynologyTest_RequiresDSMAccount(t *testing.T) {
@@ -16,7 +18,7 @@ func TestRunSynologyTest_RequiresDSMAccount(t *testing.T) {
 	cfg := defaultSynologyConfig()
 	cfg.ACME.Domains = []string{"example.com"}
 	cfg.ACME.Email = "a@b.com"
-	cfg.DNS.Config = map[string]string{ENV_CLOUDFLARE_API_TOKEN: "t"}
+	cfg.DNS.Config = map[string]string{provider.CloudflareAPIToken: "t"}
 	cfg.Synology.Account = ""
 	cfg.Synology.Password = ""
 	if err := saveSynologyConfig("", cfg); err != nil {
@@ -32,7 +34,7 @@ func TestValidateConfigForSynologyRejectsUnsafeIdentifier(t *testing.T) {
 	cfg := defaultSynologyConfig()
 	cfg.ACME.Domains = []string{"../../outside"}
 	cfg.ACME.Email = "a@b.com"
-	cfg.DNS.Config = map[string]string{ENV_CLOUDFLARE_API_TOKEN: "t"}
+	cfg.DNS.Config = map[string]string{provider.CloudflareAPIToken: "t"}
 	cfg.Synology.Account = "admin"
 	cfg.Synology.Password = "password"
 	if err := validateConfigForSynology(cfg, true); err == nil || !strings.Contains(err.Error(), "invalid public certificate identifier") {

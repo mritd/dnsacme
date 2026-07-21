@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
+	"github.com/mritd/dnsacme/internal/provider"
 	"github.com/spf13/viper"
 
 	_ "github.com/mritd/logrus"
@@ -31,14 +31,10 @@ var rootCmd = &cobra.Command{
 	PreRun:  initConfig,
 	Run: func(cmd *cobra.Command, args []string) {
 
-		// providerFn reflects build tags, so list-providers reports the providers
+		// provider.Names reflects build tags, so list-providers reports the providers
 		// compiled into this binary rather than the repository-wide catalog.
 		if listProviders {
-			var providers Providers
-			for k := range providerFn {
-				providers = append(providers, k)
-			}
-			sort.Sort(providers)
+			providers := provider.Names()
 
 			fmt.Println("=========== DNS Providers ===========")
 			for i, name := range providers {

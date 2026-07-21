@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mritd/dnsacme/internal/provider"
 	"github.com/spf13/viper"
 )
 
@@ -26,8 +27,8 @@ func TestValidateConfigSuccess(t *testing.T) {
 		Email:         "ops@example.com",
 		StorageDir:    t.TempDir(),
 		KeyType:       "P384",
-		DNSProvider:   "cloudflare",
-		DNSConfig:     map[string]string{ENV_CLOUDFLARE_API_TOKEN: "token"},
+		DNSProvider:   provider.Cloudflare,
+		DNSConfig:     map[string]string{provider.CloudflareAPIToken: "token"},
 		ZeroSSLCA:     true,
 		ObtainingHook: "/bin/true",
 		ObtainedHook:  "/bin/true",
@@ -57,8 +58,8 @@ func TestValidateConfigErrors(t *testing.T) {
 		Email:       "ops@example.com",
 		StorageDir:  t.TempDir(),
 		KeyType:     "p384",
-		DNSProvider: "cloudflare",
-		DNSConfig:   map[string]string{ENV_CLOUDFLARE_API_TOKEN: "token"},
+		DNSProvider: provider.Cloudflare,
+		DNSConfig:   map[string]string{provider.CloudflareAPIToken: "token"},
 	}
 
 	tests := []struct {
@@ -90,27 +91,13 @@ func TestValidateConfigErrors(t *testing.T) {
 	}
 }
 
-func TestProvidersSort(t *testing.T) {
-	providers := Providers{"z", "a", "m"}
-	if providers.Len() != 3 {
-		t.Fatalf("unexpected len: %d", providers.Len())
-	}
-	if !providers.Less(1, 2) {
-		t.Fatal("expected a < m")
-	}
-	providers.Swap(0, 1)
-	if providers[0] != "a" || providers[1] != "z" {
-		t.Fatalf("unexpected swap result: %#v", providers)
-	}
-}
-
 func TestConfigFromViperReadsBoundValues(t *testing.T) {
 	resetViperForTest(t)
 	t.Setenv("ACME_DOMAIN", "example.com")
 	t.Setenv("ACME_EMAIL", "ops@example.com")
 	t.Setenv("ACME_STORAGE_DIR", t.TempDir())
 	t.Setenv("ACME_KEY_TYPE", "P256")
-	t.Setenv("ACME_DNS_PROVIDER", "cloudflare")
+	t.Setenv("ACME_DNS_PROVIDER", provider.Cloudflare)
 	t.Setenv("ACME_DNS_CONFIG", "CLOUDFLARE_API_TOKEN=token")
 	t.Setenv("ACME_ZEROSSL", "false")
 
@@ -167,7 +154,7 @@ func TestConfigFromFile(t *testing.T) {
 	if cfg.ZeroSSLCA {
 		t.Fatal("expected zerossl false from config file")
 	}
-	if cfg.DNSConfig[ENV_CLOUDFLARE_API_TOKEN] != "token" {
+	if cfg.DNSConfig[provider.CloudflareAPIToken] != "token" {
 		t.Fatalf("unexpected dns config: %#v", cfg.DNSConfig)
 	}
 }

@@ -189,17 +189,19 @@ go build -tags synology
 
 ### DNS 配置
 
-dnsacme 当前支持 8 个 DNS 服务商. 理论上还可以支持更多服务商, 部分服务商尚未添加. `--dns` 参数支持的服务商可以查看 [consts.go](https://github.com/mritd/dnsacme/blob/main/consts.go) 中的 `DNS_PROVIDER_*` 常量:
+dnsacme 当前支持 8 个 DNS 服务商. 理论上还可以支持更多服务商, 部分服务商尚未添加. `--dns` 参数支持的服务商定义在 [internal/provider/provider.go](https://github.com/mritd/dnsacme/blob/main/internal/provider/provider.go) 中:
 
-```sh
-DNS_PROVIDER_ALIDNS = "alidns"
-DNS_PROVIDER_AZURE = "azure"
-DNS_PROVIDER_CLOUDFLARE = "cloudflare"
-DNS_PROVIDER_DUCKDNS = "duckdns"
-DNS_PROVIDER_GANDI = "gandi"
-DNS_PROVIDER_GODADDY = "godaddy"
-DNS_PROVIDER_HUAWEICLOUD = "huaweicloud"
-DNS_PROVIDER_TENCENTCLOUD = "tencentcloud"
+```go
+const (
+    AliDNS       = "alidns"
+    Azure        = "azure"
+    Cloudflare   = "cloudflare"
+    DuckDNS      = "duckdns"
+    Gandi        = "gandi"
+    GoDaddy      = "godaddy"
+    HuaweiCloud  = "huaweicloud"
+    TencentCloud = "tencentcloud"
+)
 ```
 
 每个 DNS 服务商需要不同的配置. `--dns-config` 参数可以多次指定:
@@ -208,27 +210,29 @@ DNS_PROVIDER_TENCENTCLOUD = "tencentcloud"
 dnsacme --dns alidns --dns-config=ALIDNS_ACCKEYID=xxxxxx --dns-config=ALIDNS_ACCKEYSECRET=xxxxxx ...
 ```
 
-各 DNS 服务商使用的配置变量名也可以在 [consts.go](https://github.com/mritd/dnsacme/blob/main/consts.go) 中查看:
+各 DNS 服务商使用的配置变量名定义在 [internal/provider/provider.go](https://github.com/mritd/dnsacme/blob/main/internal/provider/provider.go) 中:
 
-```sh
-ENV_ALIDNS_ACCKEYID = "ALIDNS_ACCKEYID"
-ENV_ALIDNS_ACCKEYSECRET = "ALIDNS_ACCKEYSECRET"
-ENV_ALIDNS_REGIONID = "ALIDNS_REGIONID"
-ENV_AZURE_TENANTID = "AZURE_TENANTID"
-ENV_AZURE_CLIENTID = "AZURE_CLIENTID"
-ENV_AZURE_CLIENTSECRET = "AZURE_CLIENTSECRET"
-ENV_AZURE_SUBSCRIPTIONID = "AZURE_SUBSCRIPTIONID"
-ENV_AZURE_RESOURCEGROUPNAME = "AZURE_RESOURCEGROUPNAME"
-ENV_GANDI_API_TOKEN = "GANDI_API_TOKEN"
-ENV_CLOUDFLARE_API_TOKEN = "CLOUDFLARE_API_TOKEN"
-ENV_GODADDY_API_TOKEN = "GODADDY_API_TOKEN"
-ENV_DUCKDNS_API_TOKEN = "DUCKDNS_API_TOKEN"
-ENV_DUCKDNS_OVERRIDE_DOMAIN = "DUCKDNS_OVERRIDE_DOMAIN"
-ENV_HUAWEICLOUD_ACCKEYID = "HUAWEICLOUD_ACCKEYID"
-ENV_HUAWEICLOUD_ACCKEYSECRET = "HUAWEICLOUD_ACCKEYSECRET"
-ENV_HUAWEICLOUD_REGIONID = "HUAWEICLOUD_REGIONID"
-ENV_TENCENTCLOUD_ACCKEYID = "TENCENTCLOUD_ACCKEYID"
-ENV_TENCENTCLOUD_ACCKEYSECRET = "TENCENTCLOUD_ACCKEYSECRET"
+```go
+const (
+    AliDNSAccessKeyID           = "ALIDNS_ACCKEYID"
+    AliDNSAccessKeySecret       = "ALIDNS_ACCKEYSECRET"
+    AliDNSRegionID              = "ALIDNS_REGIONID"
+    AzureTenantID               = "AZURE_TENANTID"
+    AzureClientID               = "AZURE_CLIENTID"
+    AzureClientSecret           = "AZURE_CLIENTSECRET"
+    AzureSubscriptionID         = "AZURE_SUBSCRIPTIONID"
+    AzureResourceGroupName      = "AZURE_RESOURCEGROUPNAME"
+    GandiAPIToken               = "GANDI_API_TOKEN"
+    CloudflareAPIToken          = "CLOUDFLARE_API_TOKEN"
+    GoDaddyAPIToken             = "GODADDY_API_TOKEN"
+    DuckDNSAPIToken             = "DUCKDNS_API_TOKEN"
+    DuckDNSOverrideDomain       = "DUCKDNS_OVERRIDE_DOMAIN"
+    HuaweiCloudAccessKeyID      = "HUAWEICLOUD_ACCKEYID"
+    HuaweiCloudAccessKeySecret  = "HUAWEICLOUD_ACCKEYSECRET"
+    HuaweiCloudRegionID         = "HUAWEICLOUD_REGIONID"
+    TencentCloudAccessKeyID     = "TENCENTCLOUD_ACCKEYID"
+    TencentCloudAccessKeySecret = "TENCENTCLOUD_ACCKEYSECRET"
+)
 ```
 
 目前并未实际使用所有 DNS 服务商, 因此部分服务商的配置没有经过验证. 如果遗漏必填参数, CertMagic 会返回对应错误.
