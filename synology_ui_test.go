@@ -5,6 +5,8 @@ package main
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -196,14 +198,17 @@ func TestSynologyPackageDoesNotShipRootMigrationHooks(t *testing.T) {
 	}
 }
 
-func TestSynologyUninstallRemovesPersistentDataOnlyOnUninstall(t *testing.T) {
+func TestSynologyUninstallRequiresExplicitDeleteChoice(t *testing.T) {
 	data, err := os.ReadFile("synology/spk/scripts/postuninst")
 	if err != nil {
 		t.Fatal(err)
 	}
 	script := string(data)
-	if !strings.Contains(script, `if [ "$SYNOPKG_PKG_STATUS" = "UNINSTALL" ]; then`) {
-		t.Fatal("postuninst must restrict destructive cleanup to a real uninstall")
+	if !strings.Contains(script, `${SYNOPKG_PKG_STATUS:-}`) {
+		t.Fatal("postuninst must safely handle an unset package status")
+	}
+	if !strings.Contains(script, `${wizard_delete_data:-false}`) {
+		t.Fatal("postuninst must require the explicit delete-data wizard choice")
 	}
 	for _, path := range []string{
 		"/var/packages/dnsacme/var",
@@ -214,6 +219,297 @@ func TestSynologyUninstallRemovesPersistentDataOnlyOnUninstall(t *testing.T) {
 			t.Fatalf("postuninst does not clean %s", path)
 		}
 	}
+}
+
+func TestSynologyUninstallWizardKeepsDataByDefault(t *testing.T) {
+	data, err := os.ReadFile("synology/spk/WIZARD_UIFILES/uninstall_uifile")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var steps []struct {
+		Items []struct {
+			Type     string `json:"type"`
+			Subitems []struct {
+				Key          string `json:"key"`
+				DefaultValue *bool  `json:"defaultValue"`
+			} `json:"subitems"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(data, &steps); err != nil {
+		t.Fatalf("invalid uninstall wizard manifest: %v", err)
+	}
+
+	defaults := make(map[string]*bool)
+	counts := make(map[string]int)
+	for _, step := range steps {
+		for _, item := range step.Items {
+			for _, subitem := range item.Subitems {
+				if subitem.Key != "wizard_keep_data" && subitem.Key != "wizard_delete_data" {
+					continue
+				}
+				if item.Type != "singleselect" {
+					t.Errorf("%s parent type = %q, want singleselect", subitem.Key, item.Type)
+				}
+				counts[subitem.Key]++
+				defaults[subitem.Key] = subitem.DefaultValue
+			}
+		}
+	}
+	for _, key := range []string{"wizard_keep_data", "wizard_delete_data"} {
+		if counts[key] != 1 {
+			t.Errorf("uninstall wizard contains %d %s entries, want exactly 1", counts[key], key)
+		}
+	}
+	keepData, ok := defaults["wizard_keep_data"]
+	if !ok {
+		t.Fatal("uninstall wizard is missing wizard_keep_data")
+	}
+	if keepData == nil {
+		t.Fatal("wizard_keep_data must declare a default value")
+	}
+	if !*keepData {
+		t.Fatal("uninstall wizard must keep package data by default")
+	}
+	deleteData, ok := defaults["wizard_delete_data"]
+	if !ok {
+		t.Fatal("uninstall wizard is missing wizard_delete_data")
+	}
+	if deleteData == nil {
+		t.Fatal("wizard_delete_data must declare a default value")
+	}
+	if *deleteData {
+		t.Fatal("uninstall wizard must not delete package data by default")
+	}
+}
+
+func TestSynologyResourceManifestIsEmptyJSONObject(t *testing.T) {
+	data, err := os.ReadFile("synology/spk/conf/resource")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var resource map[string]any
+	if err := json.Unmarshal(data, &resource); err != nil {
+		t.Fatalf("invalid resource manifest: %v", err)
+	}
+	if resource == nil {
+		t.Fatal("resource manifest must be a JSON object")
+	}
+	if len(resource) != 0 {
+		t.Fatalf("resource manifest must be empty, got %v", resource)
+	}
+}
+
+func TestSynologyBuildUsesCompatibleAMD64AndPackagesWizard(t *testing.T) {
+	data, err := os.ReadFile("synology/build-spk.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := string(data)
+	if !strings.Contains(script, "build_pkg amd64 v1 x86_64") {
+		t.Fatal("amd64 SPK must target GOAMD64 v1 for older x86_64 systems")
+	}
+	copyRE := regexp.MustCompile(`(?m)^\s*cp -R "\$ROOT/synology/spk/WIZARD_UIFILES/\." "\$work/WIZARD_UIFILES/?"\s*$`)
+	if !copyRE.MatchString(script) {
+		t.Fatal("build script must copy the uninstall wizard into the package workspace")
+	}
+	normalized := strings.ReplaceAll(script, "\\\n", " ")
+	archiveRE := regexp.MustCompile(`(?m)^\s*\(cd "\$work" && tar -cf "\$pkg" [^\n]*\bWIZARD_UIFILES\b[^\n]*\)\s*$`)
+	if !archiveRE.MatchString(normalized) {
+		t.Fatal("top-level SPK archive must include WIZARD_UIFILES")
+	}
+}
+
+func TestTaskfileSynologySpksrcBuildIsOptionalAndValidated(t *testing.T) {
+	data, err := os.ReadFile("Taskfile.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(data)
+	spksrcTask := taskfileTaskBlock(t, source, "synology-spksrc")
+
+	cliEnvRE := regexp.MustCompile(`(?m)^\s+SPKSRC_TARGET:\s*(?:"\{\{\.CLI_ARGS\}\}"|'\{\{\.CLI_ARGS\}\}')\s*$`)
+	if !cliEnvRE.MatchString(spksrcTask) {
+		t.Fatal("synology-spksrc must inject CLI_ARGS only through the SPKSRC_TARGET task environment")
+	}
+	if count := strings.Count(spksrcTask, ".CLI_ARGS"); count != 1 {
+		t.Fatalf("synology-spksrc contains %d CLI_ARGS references, want only the SPKSRC_TARGET environment binding", count)
+	}
+
+	normalized := strings.Join(strings.Fields(spksrcTask), " ")
+	for _, marker := range []string{
+		`--platform=linux/amd64`,
+		`-w /spksrc`,
+		`-e "TAR_CMD=fakeroot tar"`,
+	} {
+		if !strings.Contains(normalized, marker) {
+			t.Errorf("synology-spksrc Docker invocation is missing %q", marker)
+		}
+	}
+	const targetPattern = `^arch-[a-z0-9]+-[0-9]+(\.[0-9]+)+$`
+	targetValidationRE := regexp.MustCompile(`if ! printf ['"]%s\\n['"] "\$target" \| grep -Eq ['"]` + regexp.QuoteMeta(targetPattern) + `['"]; then`)
+	targetValidation := targetValidationRE.FindStringIndex(normalized)
+	if targetValidation == nil {
+		t.Fatal("synology-spksrc must validate the target value with the pinned architecture target regex")
+	}
+	imageValidationRE := regexp.MustCompile(`case "\$image" in ""\s*\|\s*-\*\s*\|\s*\*\[\[:space:\]\]\*\)`)
+	imageValidation := imageValidationRE.FindStringIndex(normalized)
+	if imageValidation == nil {
+		t.Fatal("synology-spksrc must reject empty, option-like, and whitespace-containing image values")
+	}
+	if strings.Contains(spksrcTask, `^[A-Za-z0-9][A-Za-z0-9._/@:-]*$`) {
+		t.Fatal("synology-spksrc must not restrict valid registry references with a character whitelist")
+	}
+	dockerRun := strings.Index(normalized, "docker run")
+	if dockerRun < 0 {
+		t.Fatal("synology-spksrc is missing the Docker invocation")
+	}
+	if targetValidation[0] > dockerRun || imageValidation[0] > dockerRun {
+		t.Fatal("synology-spksrc must validate the target and image before invoking Docker")
+	}
+	if !strings.Contains(normalized, `test -f "$SPKSRC_DIR/spk/dnsacme/Makefile"`) &&
+		!strings.Contains(normalized, `[ -f "$SPKSRC_DIR/spk/dnsacme/Makefile" ]`) &&
+		!strings.Contains(normalized, `test -f "$spksrc_input/spk/dnsacme/Makefile"`) &&
+		!strings.Contains(normalized, `[ -f "$spksrc_input/spk/dnsacme/Makefile" ]`) {
+		t.Fatal("synology-spksrc must validate SPKSRC_DIR/spk/dnsacme/Makefile as a read-only input")
+	}
+	if strings.Contains(spksrcTask, "cd --") {
+		t.Fatal("synology-spksrc must not use cd -- because macOS /bin/sh does not support it")
+	}
+	pathCaseRE := regexp.MustCompile(`case "\$SPKSRC_DIR" in /\*\) spksrc_input="?\$SPKSRC_DIR"? ;; \*\) spksrc_input="?\$PWD/\$SPKSRC_DIR"? ;; esac`)
+	caseLocation := pathCaseRE.FindStringIndex(normalized)
+	if caseLocation == nil {
+		t.Fatal("synology-spksrc must preserve absolute SPKSRC_DIR values and prefix relative values with $PWD/")
+	}
+	const resolveCommand = `spksrc_dir=$(CDPATH= cd "$spksrc_input" && pwd)`
+	resolveLocation := strings.Index(normalized, resolveCommand)
+	if resolveLocation < 0 {
+		t.Fatal("synology-spksrc must resolve the normalized input with portable CDPATH= cd")
+	}
+	if caseLocation[0] > resolveLocation {
+		t.Fatal("synology-spksrc must normalize SPKSRC_DIR before resolving it")
+	}
+	commaGuardRE := regexp.MustCompile(`case "\$spksrc_input" in \*,\*\)`)
+	commaGuard := commaGuardRE.FindStringIndex(normalized)
+	if commaGuard == nil {
+		t.Fatal("synology-spksrc must reject commas that are ambiguous in Docker --mount source paths")
+	}
+	if commaGuard[0] > dockerRun {
+		t.Fatal("synology-spksrc must reject ambiguous mount paths before invoking Docker")
+	}
+	if !strings.Contains(normalized, `"$image" make -C spk/dnsacme "$target"`) {
+		t.Fatal("synology-spksrc must pass the validated image to Docker as a quoted argument")
+	}
+	if !strings.Contains(normalized, `--mount "type=bind,source=$spksrc_dir,target=/spksrc"`) {
+		t.Fatal("synology-spksrc must pass the bind mount as one quoted --mount argument")
+	}
+	if strings.Contains(normalized, `-v "$spksrc_dir:/spksrc"`) {
+		t.Fatal("synology-spksrc must not use the ambiguous short -v bind mount form")
+	}
+	if !strings.Contains(normalized, `make -C spk/dnsacme "$target"`) {
+		t.Fatal("synology-spksrc must invoke the selected spksrc architecture target")
+	}
+
+	releaseBuild := taskfileTaskBlock(t, source, "release-build")
+	if strings.Contains(releaseBuild, "synology-spksrc") {
+		t.Fatal("release-build must not depend on the optional external spksrc build")
+	}
+}
+
+func TestSynologyPostUninstallDataRetention(t *testing.T) {
+	sourceBytes, err := os.ReadFile("synology/spk/scripts/postuninst")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const packageRoot = "/var/packages/dnsacme"
+	source := string(sourceBytes)
+	if count := strings.Count(source, packageRoot); count != 3 {
+		t.Fatalf("postuninst contains %d package root literals, want exactly 3 before isolated execution", count)
+	}
+
+	tests := []struct {
+		name       string
+		status     string
+		deleteData string
+		wantEmpty  bool
+	}{
+		{name: "variables unset"},
+		{name: "uninstall keeps data", status: "UNINSTALL", deleteData: "false"},
+		{name: "upgrade never deletes", status: "UPGRADE", deleteData: "true"},
+		{name: "explicit uninstall deletion", status: "UNINSTALL", deleteData: "true", wantEmpty: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			caseRoot := t.TempDir()
+			isolatedRoot := filepath.Join(caseRoot, "package's data")
+			patched := strings.ReplaceAll(source, packageRoot, shellSingleQuote(isolatedRoot))
+			if strings.Contains(patched, packageRoot) {
+				t.Fatal("refusing to execute postuninst with a real DSM package path")
+			}
+
+			dirs := []string{"var", "etc", "home"}
+			for _, name := range dirs {
+				dir := filepath.Join(isolatedRoot, name)
+				if err := os.MkdirAll(dir, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				for _, file := range []string{"visible", ".hidden", "..hidden"} {
+					if err := os.WriteFile(filepath.Join(dir, file), []byte("test"), 0o600); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+
+			scriptPath := filepath.Join(caseRoot, "postuninst")
+			if err := os.WriteFile(scriptPath, []byte(patched), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			cmd := exec.Command(scriptPath)
+			cmd.Env = []string{"PATH=/usr/bin:/bin"}
+			if tt.status != "" {
+				cmd.Env = append(cmd.Env, "SYNOPKG_PKG_STATUS="+tt.status)
+			}
+			if tt.deleteData != "" {
+				cmd.Env = append(cmd.Env, "wizard_delete_data="+tt.deleteData)
+			}
+			if output, err := cmd.CombinedOutput(); err != nil {
+				t.Fatalf("isolated postuninst failed: %v\n%s", err, output)
+			}
+
+			for _, name := range dirs {
+				dir := filepath.Join(isolatedRoot, name)
+				entries, err := os.ReadDir(dir)
+				if err != nil {
+					t.Fatalf("postuninst removed %s directory: %v", name, err)
+				}
+				if tt.wantEmpty && len(entries) != 0 {
+					t.Errorf("%s directory contains %d entries after explicit deletion", name, len(entries))
+				}
+				if !tt.wantEmpty && len(entries) != 3 {
+					t.Errorf("%s directory contains %d entries, want retained visible and hidden files", name, len(entries))
+				}
+			}
+		})
+	}
+}
+
+func shellSingleQuote(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", `'"'"'`) + "'"
+}
+
+func taskfileTaskBlock(t *testing.T, source, name string) string {
+	t.Helper()
+	marker := "  " + name + ":\n"
+	start := strings.Index(source, marker)
+	if start < 0 {
+		t.Fatalf("Taskfile.yaml is missing the %s task", name)
+	}
+	block := source[start+len(marker):]
+	nextTaskRE := regexp.MustCompile(`(?m)^  [a-zA-Z0-9_-]+:\s*$`)
+	if next := nextTaskRE.FindStringIndex(block); next != nil {
+		block = block[:next[0]]
+	}
+	return block
 }
 
 func TestSynologyUIButtonTextUsesDSMNativeMetrics(t *testing.T) {

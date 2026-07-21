@@ -160,6 +160,69 @@ tasks:
       - rm -rf build/synology
       - ./synology/build-spk.sh build
 
+  synology-spksrc:
+    desc: Reproduce a SynoCommunity package with an external spksrc checkout
+    env:
+      SPKSRC_TARGET: "{{.CLI_ARGS}}"
+    cmds:
+      - |
+        set -eu
+
+        target=${SPKSRC_TARGET:-arch-x64-7.2}
+        case "$target" in
+          *[[:space:]]*)
+            printf 'invalid spksrc target: %s\n' "$target" >&2
+            exit 1
+            ;;
+        esac
+        if ! printf '%s\n' "$target" | grep -Eq '^arch-[a-z0-9]+-[0-9]+(\.[0-9]+)+$'; then
+          printf 'invalid spksrc target: %s\n' "$target" >&2
+          exit 1
+        fi
+
+        image=${SPKSRC_IMAGE:-ghcr.io/synocommunity/spksrc:latest}
+        case "$image" in
+          ""|-*|*[[:space:]]*)
+            printf 'invalid spksrc image: %s\n' "$image" >&2
+            exit 1
+            ;;
+        esac
+
+        : "${SPKSRC_DIR:?set SPKSRC_DIR to an spksrc checkout}"
+        case "$SPKSRC_DIR" in
+          /*) spksrc_input=$SPKSRC_DIR ;;
+          *) spksrc_input=$PWD/$SPKSRC_DIR ;;
+        esac
+        case "$spksrc_input" in
+          *,*)
+            printf 'SPKSRC_DIR cannot contain a comma when used with Docker --mount: %s\n' "$SPKSRC_DIR" >&2
+            exit 1
+            ;;
+        esac
+        if test -f "$spksrc_input/spk/dnsacme/Makefile"; then
+          :
+        else
+          printf 'DNSACME package definition not found under SPKSRC_DIR: %s\n' "$SPKSRC_DIR" >&2
+          exit 1
+        fi
+        if spksrc_dir=$(CDPATH= cd "$spksrc_input" && pwd); then
+          :
+        else
+          printf 'cannot resolve SPKSRC_DIR: %s\n' "$SPKSRC_DIR" >&2
+          exit 1
+        fi
+
+        if ! command -v docker >/dev/null 2>&1; then
+          printf 'docker is required to run the spksrc build\n' >&2
+          exit 1
+        fi
+
+        docker run --rm --platform=linux/amd64 \
+          --mount "type=bind,source=$spksrc_dir,target=/spksrc" \
+          -w /spksrc \
+          -e "TAR_CMD=fakeroot tar" \
+          "$image" make -C spk/dnsacme "$target"
+
   synology-arch-check:
     desc: Check Synology-tagged builds across supported Go architectures
     cmds:

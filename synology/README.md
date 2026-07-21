@@ -19,9 +19,16 @@ Build a package from the repository root:
 task synology
 ```
 
+This is the lightweight first-party builder and remains the source of the SPKs
+uploaded by the repository release workflow.
+
 The first-party build intentionally produces only the common DSM targets: Go
-`amd64` with `GOAMD64=v2` maps to DSM `x86_64`, while Go `arm64` maps to DSM
+`amd64` with `GOAMD64=v1` maps to DSM `x86_64`, while Go `arm64` maps to DSM
 `aarch64`. Each SPK advertises only the architecture of the binary it contains.
+
+Package upgrades always preserve configuration, certificates, and logs. The
+uninstall wizard preserves them by default as well, and clears them only when
+the user explicitly selects the delete option.
 
 The SynoCommunity recipe can build additional packages from source for
 Go-supported 32-bit architectures. Verify that the Synology-tagged root package
@@ -34,3 +41,16 @@ task synology-arch-check
 
 This check uses temporary outputs and does not add SPKs or binaries to the
 repository `build` directory.
+
+To reproduce a SynoCommunity package with its official build environment, use
+an external spksrc checkout that contains `spk/dnsacme`:
+
+```sh
+SPKSRC_DIR=~/github/spksrc task synology-spksrc -- arch-x64-7.2
+```
+
+This optional task requires Docker, builds the DNSACME version declared by the
+external checkout's recipe, and writes the result under `$SPKSRC_DIR/packages`.
+Set `SPKSRC_IMAGE` to override the default SynoCommunity container image. The
+task is not part of `release-build` and does not replace the first-party release
+packaging flow.

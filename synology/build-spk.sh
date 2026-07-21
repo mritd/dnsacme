@@ -29,7 +29,7 @@ build_pkg() (
   trap cleanup 0
   trap 'exit 1' 1 2 15
 
-  mkdir -p "$work/package/bin" "$work/package/scripts" "$work/package/ui" "$work/conf"
+  mkdir -p "$work/package/bin" "$work/package/scripts" "$work/package/ui" "$work/conf" "$work/WIZARD_UIFILES"
   GOOS=linux GOARCH="$arch" GOAMD64="$goamd64" CGO_ENABLED=0 \
     go build -tags synology -trimpath -ldflags "-s -w -X main.commit=${BUILD_VERSION}" -o "$work/package/bin/dnsacme" "$ROOT"
 
@@ -44,6 +44,7 @@ build_pkg() (
   fi
   cp -R "$ROOT/synology/spk/scripts/." "$work/package/scripts/"
   cp -R "$ROOT/synology/spk/ui/." "$work/package/ui/"
+  cp -R "$ROOT/synology/spk/WIZARD_UIFILES/." "$work/WIZARD_UIFILES/"
 
   chmod +x "$work/package/scripts/start-stop-status"
   chmod +x "$work/package/scripts/preupgrade"
@@ -60,10 +61,10 @@ build_pkg() (
   } >> "$work/INFO"
 
   cp -R "$work/package/scripts" "$work/scripts"
-  (cd "$work" && tar -cf "$pkg" INFO package.tgz scripts conf)
+  (cd "$work" && tar -cf "$pkg" INFO package.tgz scripts conf WIZARD_UIFILES)
   printf '%s\n' "$display_pkg"
 )
 
 cd "$ROOT"
-build_pkg amd64 v2 x86_64
+build_pkg amd64 v1 x86_64
 build_pkg arm64 "" aarch64

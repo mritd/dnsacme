@@ -73,7 +73,7 @@ WebAPI, and runs an unprivileged background daemon for automatic renewal.
 - Optionally validate a certificate configuration against the Let's Encrypt staging CA without deploying it.
 - Import the first certificate into DSM, optionally create it or set it as the DSM default, then re-import future renewals automatically.
 - Keep production and staging certificates in separate storage directories.
-- Preserve package configuration and certificate storage across package upgrades.
+- Preserve package configuration, certificate storage, and logs across package upgrades. The uninstall wizard also keeps them by default and removes them only when the user explicitly selects the delete option.
 
 Build the package (produces one SPK per architecture):
 
@@ -82,6 +82,9 @@ task synology
 # build/dnsacme-synology-amd64.spk   x86_64
 # build/dnsacme-synology-arm64.spk   aarch64
 ```
+
+`task synology` is the lightweight first-party builder and remains the source of
+the SPKs uploaded by the repository release workflow.
 
 The first-party build intentionally produces only the common `amd64` and `arm64`
 SPKs. The SynoCommunity recipe can build additional packages from source for
@@ -93,6 +96,19 @@ task synology-arch-check
 ```
 
 This check uses temporary outputs and does not add files to `build`.
+
+To reproduce a SynoCommunity package with its official build environment, point
+the optional task at an external spksrc checkout that contains `spk/dnsacme`:
+
+```sh
+SPKSRC_DIR=~/github/spksrc task synology-spksrc -- arch-x64-7.2
+```
+
+This command requires Docker, builds the DNSACME version declared by that
+checkout's recipe, and writes the result under `$SPKSRC_DIR/packages`. Set
+`SPKSRC_IMAGE` to override the default SynoCommunity container image. This
+reproduction task is not part of `release-build` and does not replace the
+first-party release packaging flow.
 
 Install the SPK for your NAS architecture through **Package Center > Manual Install**
 or over SSH:
@@ -171,7 +187,7 @@ DSM's package service manager. Its built-in help is available with:
 #### Package details
 
 - DSM version: 7.0 or later.
-- Architectures: `x86_64` (`amd64`, GOAMD64 v2) and `aarch64` (`arm64`).
+- Architectures: `x86_64` (`amd64`, GOAMD64 v1) and `aarch64` (`arm64`).
 - Runtime user: the DSM package account, not root.
 - Configuration: `/var/packages/dnsacme/etc/config.yaml` with mode `0600`.
 - Certificate and log data: `/var/packages/dnsacme/var`.

@@ -1,10 +1,12 @@
 #!/bin/sh
 
 # DSM intentionally preserves the package FHS var, etc, and home directories
-# after uninstall. Remove their contents on a real uninstall so certificates,
-# ACME account keys, configuration, and logs are not left behind. During an
-# upgrade DSM invokes this script with UPGRADE, and all persistent data must stay.
-if [ "$SYNOPKG_PKG_STATUS" = "UNINSTALL" ]; then
+# after uninstall. Keep them by default so a later installation can reuse the
+# existing state. Remove their contents only when the uninstall wizard explicitly
+# requests deletion. During an upgrade DSM invokes this script with UPGRADE, and
+# all persistent data must stay.
+if [ "${SYNOPKG_PKG_STATUS:-}" = "UNINSTALL" ] && \
+   [ "${wizard_delete_data:-false}" = "true" ]; then
   for dir in \
     /var/packages/dnsacme/var \
     /var/packages/dnsacme/etc \

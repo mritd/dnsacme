@@ -70,7 +70,7 @@ dnsacme 也提供适用于 Synology DSM 7.0 及更高版本的原生套件。套
 - 可以选择通过 Let's Encrypt staging CA 验证证书配置，测试过程不会部署证书。
 - 首次申请后将证书导入 DSM，可选择新建证书或设为 DSM 默认证书，后续续期成功后会自动重新导入。
 - 生产证书和 staging 证书使用独立的存储目录。
-- 套件升级时保留配置和证书存储。
+- 套件升级时始终保留配置、证书存储和日志。卸载向导也会默认保留这些数据，只有用户明确选择删除选项时才会清理。
 
 构建套件，每种架构会生成一个 SPK 文件：
 
@@ -80,6 +80,8 @@ task synology
 # build/dnsacme-synology-arm64.spk   aarch64
 ```
 
+`task synology` 是轻量的第一方构建方式，也仍然是项目 release 流程上传 SPK 的来源。
+
 项目自行构建的套件有意只提供常用的 `amd64` 和 `arm64` SPK。SynoCommunity 配方还可以从源码构建 Go 支持的其他 32 位架构套件。可以通过以下命令检查启用 Synology build tag 后的源码是否仍兼容 `386`、ARMv5、ARMv7、使用 `GOAMD64=v1` 的 `amd64`，以及 `arm64`：
 
 ```sh
@@ -87,6 +89,14 @@ task synology-arch-check
 ```
 
 该检查使用临时输出，不会向 `build` 目录添加文件。
+
+如需使用 SynoCommunity 官方构建环境复现社区套件，可以让可选任务指向一个包含 `spk/dnsacme` 的外部 spksrc checkout：
+
+```sh
+SPKSRC_DIR=~/github/spksrc task synology-spksrc -- arch-x64-7.2
+```
+
+该命令需要 Docker，会构建该 checkout 中配方声明的 DNSACME 版本，并将产物写入 `$SPKSRC_DIR/packages`。可以通过 `SPKSRC_IMAGE` 覆盖默认的 SynoCommunity 容器镜像。该复现任务不属于 `release-build`，也不会替代第一方 release 打包流程。
 
 请根据 NAS 架构，通过 **套件中心 > 手动安装** 安装对应的 SPK，也可以通过 SSH 安装：
 
@@ -147,7 +157,7 @@ sudo /usr/syno/bin/synopkg restart dnsacme
 #### 套件信息
 
 - DSM 版本：7.0 或更高版本。
-- 架构：`x86_64`（`amd64`，GOAMD64 v2）和 `aarch64`（`arm64`）。
+- 架构：`x86_64`（`amd64`，GOAMD64 v1）和 `aarch64`（`arm64`）。
 - 运行用户：DSM 套件账户，不使用 root。
 - 配置文件：`/var/packages/dnsacme/etc/config.yaml`，权限为 `0600`。
 - 证书和日志数据：`/var/packages/dnsacme/var`。
