@@ -8,12 +8,12 @@ import (
 )
 
 func TestCatalog_DefaultBuildContainsAllProviders(t *testing.T) {
-	wantNames := []string{AliDNS, Azure, Cloudflare, DuckDNS, Gandi, GoDaddy, HuaweiCloud, TencentCloud}
+	wantNames := []string{AliDNS, Azure, Cloudflare, DuckDNS, Gandi, GoDaddy, HetznerCloud, HuaweiCloud, TencentCloud}
 	if got := Names(); !reflect.DeepEqual(got, wantNames) {
 		t.Fatalf("Names() = %v, want %v", got, wantNames)
 	}
 
-	wantDefinitions := []string{Cloudflare, AliDNS, Azure, DuckDNS, Gandi, GoDaddy, HuaweiCloud, TencentCloud}
+	wantDefinitions := []string{Cloudflare, AliDNS, Azure, DuckDNS, Gandi, GoDaddy, HetznerCloud, HuaweiCloud, TencentCloud}
 	definitions := Definitions()
 	gotDefinitions := make([]string, 0, len(definitions))
 	for _, definition := range definitions {
@@ -31,6 +31,7 @@ func TestCatalog_DefaultBuildConstructsEveryProvider(t *testing.T) {
 		AzureSubscriptionID: "subscription", AzureResourceGroupName: "group",
 		CloudflareAPIToken: "cloudflare-token", DuckDNSAPIToken: "duck-token",
 		DuckDNSOverrideDomain: "duck.example.com", GandiAPIToken: "gandi-token", GoDaddyAPIToken: "godaddy-token",
+		HetznerCloudAPIToken:   "hetznercloud-token",
 		HuaweiCloudAccessKeyID: "huawei-id", HuaweiCloudAccessKeySecret: "huawei-secret", HuaweiCloudRegionID: "cn-south-1",
 		TencentCloudAccessKeyID: "tencent-id", TencentCloudAccessKeySecret: "tencent-secret",
 	}

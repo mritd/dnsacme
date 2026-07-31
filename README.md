@@ -224,19 +224,20 @@ go build -tags synology
 
 ### DNS Config
 
-Currently dnsacme supports 8 DNS providers (theoretically more, and some have not been added yet),
+Currently dnsacme supports 9 DNS providers (theoretically more, and some have not been added yet),
 the providers supported by the `--dns` option are defined in [internal/provider/provider.go](https://github.com/mritd/dnsacme/blob/main/internal/provider/provider.go):
 
 ```go
 const (
-    AliDNS       = "alidns"
-    Azure        = "azure"
-    Cloudflare   = "cloudflare"
-    DuckDNS      = "duckdns"
-    Gandi        = "gandi"
-    GoDaddy      = "godaddy"
-    HuaweiCloud  = "huaweicloud"
-    TencentCloud = "tencentcloud"
+    AliDNS        = "alidns"
+    Azure         = "azure"
+    Cloudflare    = "cloudflare"
+    DuckDNS       = "duckdns"
+    Gandi         = "gandi"
+    GoDaddy       = "godaddy"
+    HetznerCloud  = "hetznercloud"
+    HuaweiCloud   = "huaweicloud"
+    TencentCloud  = "tencentcloud"
 )
 ```
 
@@ -263,6 +264,7 @@ const (
     GoDaddyAPIToken             = "GODADDY_API_TOKEN"
     DuckDNSAPIToken             = "DUCKDNS_API_TOKEN"
     DuckDNSOverrideDomain       = "DUCKDNS_OVERRIDE_DOMAIN"
+    HetznerCloudAPIToken        = "HETZNERCLOUD_API_TOKEN"
     HuaweiCloudAccessKeyID      = "HUAWEICLOUD_ACCKEYID"
     HuaweiCloudAccessKeySecret  = "HUAWEICLOUD_ACCKEYSECRET"
     HuaweiCloudRegionID         = "HUAWEICLOUD_REGIONID"
