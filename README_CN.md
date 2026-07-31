@@ -227,6 +227,7 @@ const (
     GoDaddyAPIToken             = "GODADDY_API_TOKEN"
     DuckDNSAPIToken             = "DUCKDNS_API_TOKEN"
     DuckDNSOverrideDomain       = "DUCKDNS_OVERRIDE_DOMAIN"
+    HetznerCloudAPIToken        = "HETZNERCLOUD_API_TOKEN"
     HuaweiCloudAccessKeyID      = "HUAWEICLOUD_ACCKEYID"
     HuaweiCloudAccessKeySecret  = "HUAWEICLOUD_ACCKEYSECRET"
     HuaweiCloudRegionID         = "HUAWEICLOUD_REGIONID"
