@@ -189,18 +189,19 @@ go build -tags synology
 
 ### DNS 配置
 
-dnsacme 当前支持 8 个 DNS 服务商. 理论上还可以支持更多服务商, 部分服务商尚未添加. `--dns` 参数支持的服务商定义在 [internal/provider/provider.go](https://github.com/mritd/dnsacme/blob/main/internal/provider/provider.go) 中:
+dnsacme 当前支持 9 个 DNS 服务商. 理论上还可以支持更多服务商, 部分服务商尚未添加. `--dns` 参数支持的服务商定义在 [internal/provider/provider.go](https://github.com/mritd/dnsacme/blob/main/internal/provider/provider.go) 中:
 
 ```go
 const (
-    AliDNS       = "alidns"
-    Azure        = "azure"
-    Cloudflare   = "cloudflare"
-    DuckDNS      = "duckdns"
-    Gandi        = "gandi"
-    GoDaddy      = "godaddy"
-    HuaweiCloud  = "huaweicloud"
-    TencentCloud = "tencentcloud"
+    AliDNS        = "alidns"
+    Azure         = "azure"
+    Cloudflare    = "cloudflare"
+    DuckDNS       = "duckdns"
+    Gandi         = "gandi"
+    GoDaddy       = "godaddy"
+    HetznerCloud  = "hetznercloud"
+    HuaweiCloud   = "huaweicloud"
+    TencentCloud  = "tencentcloud"
 )
 ```
 

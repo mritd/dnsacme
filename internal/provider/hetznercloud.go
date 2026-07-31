@@ -17,9 +17,9 @@ func newHetznerCloud(config map[string]string) (certmagic.DNSProvider, error) {
 	return nil, errors.New("failed to get Hetzner Cloud API Token")
 }
 
-// init registers Cloudflare when its build constraint is satisfied.
+// init registers Hetzner Cloud when its build constraint is satisfied.
 func init() {
-	register(Definition{Name: "HetznerCloud", Label: "Hetzner Cloud", Fields: []Field{
-		{Key: "HetznerCloudAPIToken", Label: "API Token", Secret: true, Required: true, Placeholder: "Hetzner Cloud API token"},
+	register(Definition{Name: HetznerCloud, Label: "Hetzner Cloud", Fields: []Field{
+		{Key: HetznerCloudAPIToken, Label: "API Token", Secret: true, Required: true, Placeholder: "Hetzner Cloud API token"},
 	}}, newHetznerCloud)
 }
