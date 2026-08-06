@@ -8,6 +8,20 @@ OUT=$OUT_ARG
 BUILD_VERSION=${DNSACME_BUILD_VERSION:-$(git -C "$ROOT" rev-parse HEAD)}
 PACKAGE_VERSION=${DNSACME_PACKAGE_VERSION:-}
 
+# Derive the DSM package version from the nearest semantic release tag unless
+# the caller pinned one. DSM accepts X.Y.Z or X.Y.Z-B with a numeric B, so the
+# helper folds the commits-since-tag count into the build-number slot. Invalid
+# tags are skipped; no valid tag (for example in a shallow clone) falls back to
+# the literal version in INFO.
+# Uncommitted changes do not move the version; the UI's SYNO.SDS.DNSACME.BUILD
+# marker is what distinguishes hand-deployed iterations.
+if [ -z "$PACKAGE_VERSION" ]; then
+  PACKAGE_VERSION=$(sh "$ROOT/synology/package-version.sh" "$ROOT")
+  if [ -z "$PACKAGE_VERSION" ]; then
+    printf 'warning: no semantic release tag found; keeping the version in INFO\n' >&2
+  fi
+fi
+
 case "$OUT" in
   /*) ;;
   *) OUT="$ROOT/$OUT" ;;
@@ -48,6 +62,7 @@ build_pkg() (
 
   chmod +x "$work/package/scripts/start-stop-status"
   chmod +x "$work/package/scripts/preupgrade"
+  chmod +x "$work/package/scripts/postupgrade"
   chmod +x "$work/package/scripts/postuninst"
   chmod +x "$work/package/ui/api.cgi"
 
@@ -66,5 +81,6 @@ build_pkg() (
 )
 
 cd "$ROOT"
+printf 'package version: %s\n' "${PACKAGE_VERSION:-$(grep '^version=' "$ROOT/synology/spk/INFO" | cut -d'"' -f2)}" >&2
 build_pkg amd64 v1 x86_64
 build_pkg arm64 "" aarch64

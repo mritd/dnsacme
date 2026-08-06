@@ -1,5 +1,5 @@
 package="dnsacme"
-version="0.1.30"
+version="1.0.8-1"
 displayname="DNSACME"
 description="DNS-01 ACME certificate manager with Synology DSM certificate deployment."
 maintainer="mritd"

@@ -1,0 +1,5 @@
+#!/bin/sh
+# Runtime data remains under the package var/etc links managed by DSM, so no
+# migration is required after replacing the target directory. DSM still
+# requires this lifecycle hook when upgrading an installed package.
+exit 0

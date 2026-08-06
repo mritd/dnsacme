@@ -175,10 +175,28 @@ func TestSynologyPackageUsesCommunityIdentityWithoutRootHooks(t *testing.T) {
 	}
 }
 
-func TestSynologyPackageDoesNotShipRootMigrationHooks(t *testing.T) {
+func TestSynologyPackageShipsUnprivilegedUpgradeHooks(t *testing.T) {
+	for _, path := range []string{
+		"synology/spk/scripts/preupgrade",
+		"synology/spk/scripts/postupgrade",
+	} {
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Errorf("required upgrade hook is missing: %s: %v", path, err)
+			continue
+		}
+		if info.Mode()&0o111 == 0 {
+			t.Errorf("upgrade hook is not executable: %s", path)
+		}
+		cmd := exec.Command(path)
+		cmd.Env = []string{"PATH=/usr/bin:/bin"}
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Errorf("upgrade hook %s failed in isolation: %v\n%s", path, err, output)
+		}
+	}
+
 	for _, path := range []string{
 		"synology/spk/scripts/postinst",
-		"synology/spk/scripts/postupgrade",
 		"synology/spk/scripts/repair-ownership",
 	} {
 		if _, err := os.Stat(path); !os.IsNotExist(err) {
@@ -191,7 +209,7 @@ func TestSynologyPackageDoesNotShipRootMigrationHooks(t *testing.T) {
 		t.Fatal(err)
 	}
 	buildScript := string(buildData)
-	for _, name := range []string{"postinst", "postupgrade", "repair-ownership"} {
+	for _, name := range []string{"postinst", "repair-ownership"} {
 		if strings.Contains(buildScript, `scripts/`+name+`"`) {
 			t.Errorf("build script still references root migration hook %s", name)
 		}
@@ -490,6 +508,54 @@ func TestSynologyPostUninstallDataRetention(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestSynologyPackageVersionSkipsNonSemanticTags(t *testing.T) {
+	helper, err := filepath.Abs("synology/package-version.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := t.TempDir()
+	runGit(t, repo, "init", "--quiet")
+	runGit(t, repo, "config", "user.name", "DNSACME Test")
+	runGit(t, repo, "config", "user.email", "dnsacme@example.invalid")
+	if err := os.WriteFile(filepath.Join(repo, "tracked"), []byte("base\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, repo, "add", "tracked")
+	runGit(t, repo, "commit", "--quiet", "-m", "base")
+	runGit(t, repo, "tag", "v1.2.3")
+
+	if got := runPackageVersion(t, helper, repo); got != "1.2.3" {
+		t.Fatalf("version at release tag = %q, want %q", got, "1.2.3")
+	}
+
+	runGit(t, repo, "commit", "--quiet", "--allow-empty", "-m", "ahead")
+	runGit(t, repo, "tag", "release-candidate")
+	runGit(t, repo, "tag", "v1.2.3-beta")
+	runGit(t, repo, "tag", "v01.2.3")
+	if got := runPackageVersion(t, helper, repo); got != "1.2.3-1" {
+		t.Fatalf("version behind non-semantic tags = %q, want %q", got, "1.2.3-1")
+	}
+}
+
+func runPackageVersion(t *testing.T, helper, repo string) string {
+	t.Helper()
+	cmd := exec.Command("sh", helper, repo)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("package version helper failed: %v\n%s", err, output)
+	}
+	return strings.TrimSpace(string(output))
+}
+
+func runGit(t *testing.T, repo string, args ...string) {
+	t.Helper()
+	cmdArgs := append([]string{"-C", repo}, args...)
+	cmd := exec.Command("git", cmdArgs...)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %s failed: %v\n%s", strings.Join(args, " "), err, output)
 	}
 }
 
