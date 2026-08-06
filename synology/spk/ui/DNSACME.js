@@ -1,7 +1,7 @@
 Ext.ns("SYNO.SDS.DNSACME");
 
 // Source/package cache marker used to confirm that DSM loaded the rebuilt UI.
-SYNO.SDS.DNSACME.BUILD = 92;
+SYNO.SDS.DNSACME.BUILD = 93;
 
 // DSM's protected package-app route is the CGI trust boundary; this same-origin
 // URL does not implement separate browser authentication.
@@ -260,12 +260,13 @@ SYNO.SDS.DNSACME.injectCss = function () {
     // shifted button paints fully into the full-width body area (which does not clip
     // at 30px from the right edge).
     ".dnsacme-error-msgbox .x-panel-fbar, .dnsacme-error-msgbox .x-window-footer, .dnsacme-error-msgbox .x-toolbar-ct, .dnsacme-error-msgbox .x-toolbar, .dnsacme-error-msgbox .x-toolbar-right, .dnsacme-error-msgbox .x-toolbar-cell { overflow:visible !important; }",
-    ".dnsacme-content { max-width:880px !important; margin:0 auto !important; }",
-    // Form steps: shrink the centered card to hug its fields (labelWidth 160 +
-    // field 380). At the full 880 the fields sat in the left half with a wide
-    // dead gap on the right, reading as left-heavy; a snug column centers cleanly.
-    // The log step keeps the full 880 so its output has room.
-    ".dnsacme-content-form { max-width:580px !important; }",
+    // No max-width here: the centered content column is sized by
+    // fitContentColumn() instead. A CSS max-width clamps only the rendered box,
+    // while Ext keeps sizing the panel body and every child from the unclamped
+    // width, so the surplus lands under .x-panel-bwrap's overflow:hidden and is
+    // unreachable -- the log <pre> lost 214px of horizontal scroll range plus
+    // its whole vertical scrollbar at a 1168px card region. COLUMN_CONTENT and
+    // COLUMN_FORM own the widths so the layout engine and the paint agree.
     // Flat, DSM-native: a per-step title + muted subtitle above the fields, no
     // card frame. The log box is its own container, so a wrapping card just
     // reads as a redundant box-in-box.
@@ -360,6 +361,20 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
   resizable: true,
   maximizable: true,
 
+  // Max width of the centered content column, applied as body padding by
+  // fitContentColumn() so Ext sizes every child from the real column width.
+  // Mirrors .dnsacme-stepper-inner's max-width so the stepper and the cards
+  // stay on the same column as the window grows.
+  COLUMN_CONTENT: 880,
+  // Form steps shrink the column to hug their fields (labelWidth 160 + field
+  // 380). At the full 880 the fields sat in the left half with a wide dead gap
+  // on the right, reading as left-heavy; a snug column centers cleanly. The log
+  // step keeps COLUMN_CONTENT so its output has room.
+  COLUMN_FORM: 580,
+  // Minimum gutter between the column and the card region edge, matching the
+  // horizontal half of the card bodyStyle padding.
+  COLUMN_GUTTER: 24,
+
   constructor: function (config) {
     var me = this;
     me.providers = [];
@@ -399,7 +414,9 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
     // remaining height whenever the card region resizes. Hooking the region's own
     // "resize" (not the window's) guarantees the border layout has already applied
     // the new geometry; the one-tick defer lets the region body settle first.
-    me.cards.on("resize", function () { me.fitLogHeight.defer(1, me); }, me);
+    // Width first: fitContentColumn re-runs the card's layout, which resizes the
+    // <pre>, so measuring its height before that would use the stale geometry.
+    me.cards.on("resize", function () { me.fitContentColumn(); me.fitLogHeight.defer(1, me); }, me);
     // Ext's nested auto layouts keep the width from their first render. Force a
     // complete layout pass after an outer window resize so a card initially
     // rendered in a restored narrow window expands instead of staying clipped.
@@ -433,6 +450,7 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
     var layout = this.cards && this.cards.getLayout ? this.cards.getLayout() : null;
     var active = layout && layout.activeItem;
     if (active && active.doLayout) { active.doLayout(); }
+    this.fitContentColumn();
     this.fitLogHeight.defer(1, this);
   },
 
@@ -564,6 +582,9 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
     me.cards.getLayout().setActiveItem(me.cardItems[i]);
     me.renderStepper();
     me.syncBar();
+    // A card layout hides inactive items, so a card that was never shown at the
+    // current window size carries a stale column width until it becomes active.
+    me.fitContentColumn();
     if (i === 3) { me.startLogs(); me.fitLogHeight.defer(1, me); } else { me.stopLogs(); }
   },
 
@@ -731,15 +752,17 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
       items: [card]
     });
     form.dnsacmeInner = formInner;
+    form.dnsacmeColumn = this.COLUMN_FORM;
     return form;
   },
 
   contentPanel: function (id, items, cfg) {
     cfg = cfg || {};
     var cardItems = cfg.title ? [this.cardHead(cfg.title, cfg.subtitle)].concat(items) : items;
-    // The card is a centered column (.dnsacme-content = max-width 880 + margin
-    // auto), shared with the stepper so both align and stay centered as the
-    // window grows. The log fills the column (shrinking on narrow windows).
+    // The card is a centered column (COLUMN_CONTENT wide, centered by the outer
+    // panel's body padding), shared with the stepper so both align and stay
+    // centered as the window grows. The log fills the column, shrinking on
+    // narrow windows.
     var card = new Ext.Panel({
       border: false,
       layout: "anchor",
@@ -748,7 +771,7 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
       bodyStyle: "background:transparent;padding:0;",
       items: cardItems
     });
-    return new Ext.Panel({
+    var panel = new Ext.Panel({
       id: "dnsacme-card-" + id,
       border: false,
       layout: "fit",
@@ -756,6 +779,8 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
       bodyStyle: "padding:24px 24px 22px 24px;background:transparent;",
       items: [card]
     });
+    panel.dnsacmeColumn = this.COLUMN_CONTENT;
+    return panel;
   },
 
   logArea: function (height) {
@@ -772,11 +797,65 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
     });
   },
 
+  // activeCard returns the card panel the card layout is currently showing, or
+  // null before the first layout. Inactive cards are display:none, so they
+  // measure 0 wide and must not be resized.
+  activeCard: function () {
+    var layout = this.cards && this.cards.getLayout ? this.cards.getLayout() : null;
+    return layout ? layout.activeItem : null;
+  },
+
+  // fitContentColumn centers the content column by widening the active card's
+  // body padding, so the width Ext computes for the card IS the column width.
+  //
+  // Why padding and not CSS max-width: Ext.Element.setWidth() subtracts a
+  // content-box element's own padding, so Panel.onResize sizing the body to
+  // (panel width - padding) makes the fit layout hand the card the padded width
+  // and every descendant inherits it. A CSS max-width instead clamps only what
+  // paints; Ext keeps sizing children from the unclamped width and
+  // .x-panel-bwrap's overflow:hidden eats the surplus, which is what made the
+  // log <pre> 214px wider than its visible box and left the tail of every long
+  // line -- and both scrollbars -- permanently out of reach.
+  //
+  // Ext caches the body width, so the padding change only takes effect after
+  // syncSize() re-runs Panel.onResize; setting padding alone is a no-op.
+  fitContentColumn: function () {
+    var me = this;
+    var panel = me.activeCard();
+    if (!panel || !panel.rendered || !panel.body) { return; }
+    var max = panel.dnsacmeColumn;
+    if (!max) { return; }
+    var avail = panel.getWidth();
+    if (avail <= 0) { return; }
+
+    // Column = min(max, avail - 2 * COLUMN_GUTTER), centered. Below a
+    // (max + 2 * gutter) wide region the column shrinks with the window and the
+    // gutter stays at its floor. Same arithmetic as .dnsacme-stepper-inner
+    // (width:100%; max-width:880px inside a padding:0 24px flex row), so the
+    // stepper and the cards stay on one column at every window width.
+    // ceil, not floor: an odd (avail - max) cannot be split evenly by integer
+    // padding, and rounding the gutter down would let the column reach max + 1.
+    // The stepper centers via flex and can take the half pixel, so the two
+    // columns differ by at most 1px at odd widths and agree everywhere else.
+    var gutter = Math.max(me.COLUMN_GUTTER, Math.ceil((avail - max) / 2));
+    // "resize" fires continuously while the window is dragged and the work
+    // below is a forced relayout of the card subtree, so skip the passes that
+    // would rewrite the same padding. Every caller that needs a relayout for
+    // another reason already runs its own doLayout, so nothing depends on this
+    // call as a side effect.
+    if (panel.dnsacmeGutter === gutter) { return; }
+    panel.dnsacmeGutter = gutter;
+    panel.body.setStyle({ paddingLeft: gutter + "px", paddingRight: gutter + "px" });
+    panel.syncSize();
+    panel.doLayout(false, true);
+  },
+
   // fitLogHeight sizes the visible log <pre> to fill the remaining height of the
   // card region so the pre's own scrollbar owns the overflow. The card region
   // does not scroll (autoScroll:false), so a fixed pre height overflowed the
   // region and the bbar clipped the last line on shorter windows. Only the height
-  // is touched, leaving the centered-column width/margin CSS untouched.
+  // is touched; the width comes from fitContentColumn sizing the column, so this
+  // must run after it (and one tick later, once that layout has settled).
   fitLogHeight: function () {
     var me = this;
     var area = me.visibleLogArea();
@@ -956,6 +1035,7 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
     me.updateDeployedSummary(cfg);
     me.syncBar();
     me.startLogs();
+    me.fitContentColumn();
     me.fitLogHeight.defer(1, me);
   },
 
