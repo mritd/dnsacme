@@ -8,12 +8,12 @@ import (
 )
 
 func TestCatalog_DefaultBuildContainsAllProviders(t *testing.T) {
-	wantNames := []string{AliDNS, Azure, Cloudflare, DuckDNS, Gandi, GoDaddy, HetznerCloud, HuaweiCloud, TencentCloud}
+	wantNames := []string{AcmeDNS, AliDNS, Azure, Cloudflare, DuckDNS, Gandi, GoDaddy, HetznerCloud, HuaweiCloud, TencentCloud}
 	if got := Names(); !reflect.DeepEqual(got, wantNames) {
 		t.Fatalf("Names() = %v, want %v", got, wantNames)
 	}
 
-	wantDefinitions := []string{Cloudflare, AliDNS, Azure, DuckDNS, Gandi, GoDaddy, HetznerCloud, HuaweiCloud, TencentCloud}
+	wantDefinitions := []string{Cloudflare, AcmeDNS, AliDNS, Azure, DuckDNS, Gandi, GoDaddy, HetznerCloud, HuaweiCloud, TencentCloud}
 	definitions := Definitions()
 	gotDefinitions := make([]string, 0, len(definitions))
 	for _, definition := range definitions {
@@ -27,6 +27,7 @@ func TestCatalog_DefaultBuildContainsAllProviders(t *testing.T) {
 func TestCatalog_DefaultBuildConstructsEveryProvider(t *testing.T) {
 	config := map[string]string{
 		AliDNSAccessKeyID: "ali-id", AliDNSAccessKeySecret: "ali-secret", AliDNSRegionID: "cn-hangzhou",
+		AcmeDNSUsername: "username", AcmeDNSPassword: "password", AcmeDNSSubdomain: "subdomain", AcmeDNSServerURL: "https://auth.acme-dns.io",
 		AzureTenantID: "tenant", AzureClientID: "client", AzureClientSecret: "secret",
 		AzureSubscriptionID: "subscription", AzureResourceGroupName: "group",
 		CloudflareAPIToken: "cloudflare-token", DuckDNSAPIToken: "duck-token",

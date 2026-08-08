@@ -101,7 +101,14 @@ func serveSynologyCGI(ctx context.Context, configPath string, getenv cgiEnv, inp
 	case "config":
 		payload, err = cgiConfig(method, configPath, input)
 	case "reconfigure":
-		payload, err = cgiReconfigure(method, configPath)
+		payload, err = cgiReconfigure(method, configPath, input)
+	case "acmedns-register":
+		if method != http.MethodPost {
+			status = http.StatusMethodNotAllowed
+			err = fmt.Errorf("method %s is not allowed", method)
+			break
+		}
+		payload, err = cgiAcmeDNSRegister(ctx, method, configPath, input)
 	case "metadata":
 		definitions := provider.Definitions()
 		if len(definitions) == 0 {
@@ -119,18 +126,28 @@ func serveSynologyCGI(ctx context.Context, configPath string, getenv cgiEnv, inp
 			err = fmt.Errorf("method %s is not allowed", method)
 			break
 		}
+		editToken, decodeErr := decodeSynologyTaskEditToken(input)
+		if decodeErr != nil {
+			err = decodeErr
+			break
+		}
 		runCtx, cancel := context.WithTimeout(ctx, 20*time.Minute)
 		defer cancel()
-		payload, err = runSynologyTest(runCtx, configPath)
+		payload, err = runSynologyTestForEditToken(runCtx, configPath, editToken)
 	case "apply":
 		if method != http.MethodPost {
 			status = http.StatusMethodNotAllowed
 			err = fmt.Errorf("method %s is not allowed", method)
 			break
 		}
+		editToken, decodeErr := decodeSynologyTaskEditToken(input)
+		if decodeErr != nil {
+			err = decodeErr
+			break
+		}
 		runCtx, cancel := context.WithTimeout(ctx, 20*time.Minute)
 		defer cancel()
-		payload, err = runSynologyApply(runCtx, configPath)
+		payload, err = runSynologyApplyForEditToken(runCtx, configPath, editToken)
 	default:
 		status = http.StatusNotFound
 		err = fmt.Errorf("unknown action: %s", action)
@@ -142,70 +159,107 @@ func serveSynologyCGI(ctx context.Context, configPath string, getenv cgiEnv, inp
 	return writeCGIJSON(output, status, payload, err)
 }
 
-func cgiConfig(method, configPath string, input io.Reader) (any, error) {
-	current, err := loadSynologyConfig(configPath)
-	if err != nil {
-		return nil, err
+func decodeSynologyTaskEditToken(input io.Reader) (string, error) {
+	var request struct {
+		EditToken string `json:"editToken"`
 	}
+	if err := json.NewDecoder(input).Decode(&request); err != nil {
+		return "", err
+	}
+	// Older cached package UIs posted an empty object. Preserve that behavior
+	// during upgrades, while current clients bind the action to their saved form.
+	return request.EditToken, nil
+}
+
+func cgiConfig(method, configPath string, input io.Reader) (any, error) {
 	if method == http.MethodGet {
-		return synologyConfigResponse(current, configPath), nil
+		snapshot, err := loadSynologyConfigSnapshot(configPath)
+		if err != nil {
+			return nil, err
+		}
+		return synologyConfigResponse(snapshot), nil
 	}
 	if method != http.MethodPost && method != http.MethodPut {
 		return nil, fmt.Errorf("method %s is not allowed", method)
 	}
-	var next SynologyConfig
-	if err := json.NewDecoder(input).Decode(&next); err != nil {
+	var request struct {
+		SynologyConfig
+		ExpectedEditToken *string `json:"editToken"`
+	}
+	if err := json.NewDecoder(input).Decode(&request); err != nil {
 		return nil, err
 	}
-	// Runtime paths belong to the package installation, not the browser. Ignore
-	// client-supplied values to keep config writes inside package-owned storage.
-	next.Runtime = current.Runtime
-	// Reconfiguration mode is controlled by its dedicated CGI action. Normal form
-	// saves must preserve it until a production apply completes successfully.
-	next.Reconfiguring = current.Reconfiguring
-	// The UI only receives redacted values. A mask sentinel or an unchanged empty
-	// secret means "keep the persisted value" rather than erase credentials.
-	next = mergeSecrets(next, current)
-	next = normalizeSynologyConfig(next)
-	if next.ConfigHash() != current.ConfigHash() {
-		next.LastTest = SynologyOperationState{}
-		next.LastApply = SynologyOperationState{}
-	} else {
-		next.LastTest = current.LastTest
-		next.LastApply = current.LastApply
-	}
-	if err := saveSynologyConfig(configPath, next); err != nil {
+	next := request.SynologyConfig
+	saved, err := mutateSynologyConfig(configPath, func(current *SynologyConfig, currentEditToken string) (bool, error) {
+		if request.ExpectedEditToken != nil && currentEditToken != *request.ExpectedEditToken {
+			return false, errSynologyConfigChanged
+		}
+		// Runtime paths belong to the package installation, not the browser. Ignore
+		// client-supplied values to keep config writes inside package-owned storage.
+		next.Runtime = current.Runtime
+		// Reconfiguration mode is controlled by its dedicated CGI action. Normal form
+		// saves must preserve it until a production apply completes successfully.
+		next.Reconfiguring = current.Reconfiguring
+		// The UI only receives redacted values. A mask sentinel or an unchanged empty
+		// secret means "keep the persisted value" rather than erase credentials.
+		next = mergeSecrets(next, *current)
+		next = normalizeSynologyConfig(next)
+		if err := normalizeManualAcmeDNSConfig(&next.DNS); err != nil {
+			return false, err
+		}
+		if next.ConfigHash() != current.ConfigHash() {
+			next.LastTest = SynologyOperationState{}
+			next.LastApply = SynologyOperationState{}
+		} else {
+			next.LastTest = current.LastTest
+			next.LastApply = current.LastApply
+		}
+		*current = next
+		return true, nil
+	})
+	if err != nil {
 		return nil, err
 	}
-	return synologyConfigResponse(next, configPath), nil
+	return synologyConfigResponse(saved), nil
 }
 
 // cgiReconfigure persists the user's decision to edit a deployed configuration.
 // It deliberately leaves the certificate hash and last apply result unchanged,
 // so merely opening the wizard cannot interrupt the active renewal manager.
-func cgiReconfigure(method, configPath string) (any, error) {
+func cgiReconfigure(method, configPath string, input io.Reader) (any, error) {
 	if method != http.MethodPost {
 		return nil, fmt.Errorf("method %s is not allowed", method)
 	}
-	cfg, err := loadSynologyConfig(configPath)
+	var request struct {
+		ExpectedEditToken *string `json:"editToken"`
+	}
+	if input != nil {
+		if err := json.NewDecoder(input).Decode(&request); err != nil && !errors.Is(err, io.EOF) {
+			return nil, err
+		}
+	}
+	snapshot, err := mutateSynologyConfig(configPath, func(cfg *SynologyConfig, currentEditToken string) (bool, error) {
+		if request.ExpectedEditToken != nil && currentEditToken != *request.ExpectedEditToken {
+			return false, errSynologyConfigChanged
+		}
+		cfg.Reconfiguring = true
+		// Re-entering the wizard does not erase an optional staging result when the
+		// user keeps the configuration unchanged. ConfigHash invalidates it naturally
+		// if a subsequent form save changes certificate inputs.
+		return true, nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	cfg.Reconfiguring = true
-	// Re-entering the wizard does not erase an optional staging result when the
-	// user keeps the configuration unchanged. ConfigHash invalidates it naturally
-	// if a subsequent form save changes certificate inputs.
-	if err := saveSynologyConfig(configPath, cfg); err != nil {
-		return nil, err
-	}
-	return synologyConfigResponse(cfg, configPath), nil
+	return synologyConfigResponse(snapshot), nil
 }
 
 func cgiStatus(configPath string) (any, error) {
-	cfg, err := loadSynologyConfig(configPath)
+	snapshot, err := loadSynologyConfigSnapshot(configPath)
 	if err != nil {
 		return nil, err
 	}
+	cfg := snapshot.Config
 	lastTest := cfg.LastTest
 	lastTest.ConfigHash = ""
 	lastApply := cfg.LastApply
@@ -213,6 +267,7 @@ func cgiStatus(configPath string) (any, error) {
 	return map[string]any{
 		"testPassed": cfg.TestPassed(),
 		"canRenew":   cfg.CanRenew(),
+		"editToken":  snapshot.EditToken,
 		"lastTest":   lastTest,
 		"lastApply":  lastApply,
 		// Long-running apply requests can leave DSM's SCGI gateway unable to serve
@@ -284,26 +339,16 @@ func normalizeSynologyLogTimestamps(s string) string {
 
 // synologyConfigResponse is the only configuration shape returned to the UI;
 // credentials and internal validation hashes are always redacted here.
-func synologyConfigResponse(cfg SynologyConfig, configPath string) map[string]any {
-	cfg = normalizeSynologyConfig(cfg)
+func synologyConfigResponse(snapshot synologyConfigSnapshot) map[string]any {
+	cfg := normalizeSynologyConfig(snapshot.Config)
 	return map[string]any{
 		"config":     cfg.Redacted(),
+		"editToken":  snapshot.EditToken,
 		"testPassed": cfg.TestPassed(),
 		"canRenew":   cfg.CanRenew(),
-		"persisted":  synologyConfigPersisted(configPath),
+		"persisted":  snapshot.Persisted,
 		"detected":   detectSynologyEndpoint(nginxConfPath()),
 	}
-}
-
-// synologyConfigPersisted returns false only when the config is definitely
-// absent. Other stat errors are treated as persisted so first-run endpoint
-// detection cannot overwrite manual values on an indeterminate filesystem.
-func synologyConfigPersisted(configPath string) bool {
-	_, err := os.Stat(synologyConfigPath(configPath))
-	if err == nil {
-		return true
-	}
-	return !errors.Is(err, os.ErrNotExist)
 }
 
 // writeCGIJSON emits the CGI Status header and the stable response envelope

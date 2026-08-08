@@ -20,13 +20,383 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
 	"github.com/caddyserver/certmagic"
 	"github.com/mritd/dnsacme/internal/provider"
 )
+
+func TestMutateSynologyConfigSerializesConcurrentMutations(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	firstDone := make(chan error, 1)
+	go func() {
+		_, err := mutateSynologyConfig(path, func(*SynologyConfig, string) (bool, error) {
+			close(entered)
+			<-release
+			return false, nil
+		})
+		firstDone <- err
+	}()
+	<-entered
+
+	secondEntered := make(chan struct{})
+	secondDone := make(chan error, 1)
+	go func() {
+		_, err := mutateSynologyConfig(path, func(*SynologyConfig, string) (bool, error) {
+			close(secondEntered)
+			return false, nil
+		})
+		secondDone <- err
+	}()
+
+	select {
+	case <-secondEntered:
+		t.Fatal("second mutation entered while the first held the config lock")
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(release)
+	if err := <-firstDone; err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-secondDone:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("second mutation did not resume after lock release")
+	}
+}
+
+func TestMutateSynologyConfigReturnsNewEditToken(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	cfg := defaultSynologyConfig()
+	if err := saveSynologyConfig(path, cfg); err != nil {
+		t.Fatal(err)
+	}
+	before, err := loadSynologyConfigSnapshot(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated, err := mutateSynologyConfig(path, func(cfg *SynologyConfig, _ string) (bool, error) {
+		cfg.ACME.Email = "admin@example.com"
+		return true, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.EditToken == before.EditToken || updated.Config.ACME.Email != "admin@example.com" {
+		t.Fatalf("mutation snapshot = %#v, before token = %q", updated, before.EditToken)
+	}
+	if strings.Contains(updated.EditToken, ":") || len(updated.EditToken) != sha256.Size*2 {
+		t.Fatalf("edit token exposes raw metadata: %q", updated.EditToken)
+	}
+}
+
+func TestSynologyLegacyRevisionIsIgnoredOnLoadAndSave(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(path, []byte("revision: 99\nacme:\n  email: admin@example.com\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := loadSynologyConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.ACME.Email != "admin@example.com" {
+		t.Fatalf("legacy yaml was not loaded: %#v", loaded)
+	}
+	if err := saveSynologyConfig(path, loaded); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "revision:") {
+		t.Fatalf("abandoned revision persisted after normal save: %s", data)
+	}
+}
+
+func TestCGIConfigOptionalEditTokenCompareAndSwap(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	cfg := validSynologyConfig(t.TempDir())
+	if err := saveSynologyConfig(path, cfg); err != nil {
+		t.Fatal(err)
+	}
+	body, err := json.Marshal(cfg.Redacted())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var request map[string]any
+	if err := json.Unmarshal(body, &request); err != nil {
+		t.Fatal(err)
+	}
+	get, err := cgiConfig(http.MethodGet, path, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request["editToken"] = get.(map[string]any)["editToken"]
+	body, err = json.Marshal(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := cgiConfig(http.MethodPost, path, bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.(map[string]any)["editToken"] == request["editToken"] {
+		t.Fatalf("save response did not expose new edit token: %#v", response)
+	}
+	if _, err := cgiConfig(http.MethodPost, path, bytes.NewReader(body)); !errors.Is(err, errSynologyConfigChanged) {
+		t.Fatalf("stale edit token error = %v, want configuration changed", err)
+	}
+	delete(request, "editToken")
+	legacyBody, err := json.Marshal(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cgiConfig(http.MethodPost, path, bytes.NewReader(legacyBody)); err != nil {
+		t.Fatalf("legacy save without edit token must remain accepted: %v", err)
+	}
+}
+
+func TestCGIConfigEditTokenProtectsFirstWrite(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	first, err := cgiConfig(http.MethodGet, path, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	staleToken := first.(map[string]any)["editToken"].(string)
+	cfg := validSynologyConfig(t.TempDir()).Redacted()
+	body, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cgiConfig(http.MethodPost, path, bytes.NewReader(body)); err != nil {
+		t.Fatal(err)
+	}
+	var request map[string]any
+	if err := json.Unmarshal(body, &request); err != nil {
+		t.Fatal(err)
+	}
+	request["editToken"] = staleToken
+	body, err = json.Marshal(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cgiConfig(http.MethodPost, path, bytes.NewReader(body)); !errors.Is(err, errSynologyConfigChanged) {
+		t.Fatalf("stale first-run token error = %v, want configuration changed", err)
+	}
+}
+
+func TestMutateSynologyConfigIgnoresStaleLockFileAndClosedFDReleasesLock(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	lockPath := path + ".lock"
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(lockPath, []byte("stale"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	lock, err := os.OpenFile(lockPath, os.O_RDWR, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
+		t.Fatal(err)
+	}
+	// Do not unlock explicitly. Kernel advisory locks are released with the FD,
+	// which makes interruption, reinstall, and upgrade safe despite a lingering
+	// lock-file path.
+	if err := lock.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = mutateSynologyConfig(path, func(cfg *SynologyConfig, _ string) (bool, error) {
+		cfg.ACME.Email = "admin@example.com"
+		return true, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := loadSynologyConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.ACME.Email != "admin@example.com" {
+		t.Fatalf("stale lock file prevented config mutation: %+v", loaded)
+	}
+}
+
+func TestMutateSynologyConfigTimesOutOnHeldLock(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	lockPath := path + ".lock"
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	lock, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		_ = syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
+		_ = lock.Close()
+	}()
+	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
+		t.Fatal(err)
+	}
+
+	oldTimeout, oldRetry := synologyConfigLockTimeout, synologyConfigLockRetry
+	synologyConfigLockTimeout = 50 * time.Millisecond
+	synologyConfigLockRetry = time.Millisecond
+	defer func() {
+		synologyConfigLockTimeout = oldTimeout
+		synologyConfigLockRetry = oldRetry
+	}()
+	if _, err := mutateSynologyConfig(path, func(*SynologyConfig, string) (bool, error) {
+		return false, nil
+	}); err == nil {
+		t.Fatal("mutation succeeded while another process held the config lock")
+	}
+}
+
+func TestUpdateSynologyTaskStateRejectsStaleResult(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	cfg := validSynologyConfig(t.TempDir())
+	if err := saveSynologyConfig(path, cfg); err != nil {
+		t.Fatal(err)
+	}
+	startingHash := cfg.ConfigHash()
+	starting, err := loadSynologyConfigSnapshot(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mutateSynologyConfig(path, func(cfg *SynologyConfig, _ string) (bool, error) {
+		cfg.ACME.Email = "changed@example.com"
+		return true, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	latest, updated, err := updateSynologyTaskState(path, startingHash, starting.EditToken, func(cfg *SynologyConfig) {
+		cfg.LastTest = SynologyOperationState{Success: true, ConfigHash: startingHash}
+		cfg.LastApply = SynologyOperationState{Success: true, ConfigHash: startingHash}
+		cfg.Reconfiguring = false
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated {
+		t.Fatal("stale task state was merged into a changed configuration")
+	}
+	if latest.Config.ACME.Email != "changed@example.com" {
+		t.Fatalf("stale task overwrote concurrent form edit: %q", latest.Config.ACME.Email)
+	}
+	if latest.Config.LastTest.Success || latest.Config.LastApply.Success {
+		t.Fatalf("stale task result was persisted: %+v", latest.Config)
+	}
+}
+
+func TestUpdateSynologyTaskStateRejectsReconfigureEditToken(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	cfg := validSynologyConfig(t.TempDir())
+	cfg.Reconfiguring = true
+	if err := saveSynologyConfig(path, cfg); err != nil {
+		t.Fatal(err)
+	}
+	starting, err := loadSynologyConfigSnapshot(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	startingHash := cfg.ConfigHash()
+	if _, err := cgiReconfigure(http.MethodPost, path, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	latest, updated, err := updateSynologyTaskState(path, startingHash, starting.EditToken, func(cfg *SynologyConfig) {
+		cfg.LastApply = SynologyOperationState{Success: true, ConfigHash: startingHash}
+		cfg.Reconfiguring = false
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated {
+		t.Fatal("apply result overwrote a concurrent reconfigure action")
+	}
+	if !latest.Config.Reconfiguring {
+		t.Fatal("concurrent reconfigure state was lost")
+	}
+}
+
+func TestRunSynologyTestDoesNotOverwriteConcurrentConfigEdit(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	cfg := validSynologyConfig(dir)
+	server := fakeSynologyServer(t)
+	u, _ := url.Parse(server.URL)
+	host, port, _ := strings.Cut(u.Host, ":")
+	cfg.Synology.Scheme = u.Scheme
+	cfg.Synology.Host = host
+	cfg.Synology.Port = atoiForTest(port)
+	if err := saveSynologyConfig(path, cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	oldManage := manageCertificates
+	started := make(chan struct{})
+	release := make(chan struct{})
+	manageCertificates = func(context.Context, *certmagic.Config, []string) error {
+		close(started)
+		<-release
+		return nil
+	}
+	defer func() { manageCertificates = oldManage }()
+
+	type taskOutcome struct {
+		result synologyTaskResult
+		err    error
+	}
+	done := make(chan taskOutcome, 1)
+	go func() {
+		result, err := runSynologyTest(context.Background(), path)
+		done <- taskOutcome{result: result, err: err}
+	}()
+	<-started
+	if _, err := mutateSynologyConfig(path, func(cfg *SynologyConfig, _ string) (bool, error) {
+		cfg.ACME.Email = "changed@example.com"
+		return true, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	close(release)
+	outcome := <-done
+	if !errors.Is(outcome.err, errSynologyConfigChanged) {
+		t.Fatalf("stale task error = %v, want configuration-changed error", outcome.err)
+	}
+	if outcome.result.State != "stale" {
+		t.Fatalf("stale task state = %q, want stale", outcome.result.State)
+	}
+	if outcome.result.Config.ACME.Email != "changed@example.com" {
+		t.Fatalf("task result returned stale config: %q", outcome.result.Config.ACME.Email)
+	}
+	loaded, err := loadSynologyConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.ACME.Email != "changed@example.com" {
+		t.Fatalf("test run overwrote concurrent config edit: %q", loaded.ACME.Email)
+	}
+	if loaded.LastTest.Success {
+		t.Fatalf("stale successful test was persisted: %+v", loaded.LastTest)
+	}
+}
 
 func TestSynologyConfigDefaultsSaveLoadAndHash(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
@@ -36,6 +406,9 @@ func TestSynologyConfigDefaultsSaveLoadAndHash(t *testing.T) {
 	}
 	if cfg.DNS.Provider != provider.Default() {
 		t.Fatalf("unexpected default provider: %s", cfg.DNS.Provider)
+	}
+	if !reflect.DeepEqual(cfg.DNS.Resolvers, []string{defaultSynologyResolver}) {
+		t.Fatalf("unexpected default resolvers: %#v", cfg.DNS.Resolvers)
 	}
 
 	cfg.ACME.Domains = []string{" example.com ", "", "*.example.com", "example.com"}
@@ -122,8 +495,79 @@ func TestNormalizeSynologyConfigFillsDefaults(t *testing.T) {
 		cfg.Synology.Port != 5001 ||
 		cfg.Runtime.StorageDir == "" ||
 		cfg.Runtime.StagingDir == "" ||
-		cfg.Runtime.LogPath == "" {
+		cfg.Runtime.LogPath == "" ||
+		!reflect.DeepEqual(cfg.DNS.Resolvers, []string{defaultSynologyResolver}) {
 		t.Fatalf("defaults were not normalized: %+v", cfg)
+	}
+}
+
+func TestNormalizeSynologyResolversTrimsDeduplicatesAndRoundTrips(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	cfg := validSynologyConfig(dir)
+	cfg.DNS.Resolvers = []string{" 1.1.1.1 ", "", "8.8.8.8", "1.1.1.1"}
+	if err := saveSynologyConfig(path, cfg); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := loadSynologyConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"1.1.1.1", "8.8.8.8"}
+	if !reflect.DeepEqual(loaded.DNS.Resolvers, want) {
+		t.Fatalf("normalized resolvers = %#v, want %#v", loaded.DNS.Resolvers, want)
+	}
+	data, err := json.Marshal(loaded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded SynologyConfig
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if got := normalizeSynologyConfig(decoded).DNS.Resolvers; !reflect.DeepEqual(got, want) {
+		t.Fatalf("JSON resolvers = %#v, want %#v", got, want)
+	}
+
+	loaded.DNS.Resolvers = []string{"", " "}
+	if got := normalizeSynologyConfig(loaded).DNS.Resolvers; !reflect.DeepEqual(got, []string{defaultSynologyResolver}) {
+		t.Fatalf("empty resolvers = %#v, want default", got)
+	}
+}
+
+func TestValidateSynologyResolversForAcmeDNSOnly(t *testing.T) {
+	tests := []struct {
+		name      string
+		resolvers []string
+		wantError bool
+	}{
+		{name: "IPv4", resolvers: []string{"1.1.1.1"}},
+		{name: "IPv4WithPort", resolvers: []string{"1.1.1.1:5353"}},
+		{name: "BareIPv6", resolvers: []string{"2001:4860:4860::8888"}},
+		{name: "BracketedIPv6WithPort", resolvers: []string{"[2001:4860:4860::8888]:53"}},
+		{name: "Hostname", resolvers: []string{"dns.example.com"}, wantError: true},
+		{name: "BracketedIPv6WithoutPort", resolvers: []string{"[2001:4860:4860::8888]"}, wantError: true},
+		{name: "MissingPort", resolvers: []string{"1.1.1.1:"}, wantError: true},
+		{name: "SignedPort", resolvers: []string{"1.1.1.1:+53"}, wantError: true},
+		{name: "NegativePort", resolvers: []string{"1.1.1.1:-53"}, wantError: true},
+		{name: "ZeroPort", resolvers: []string{"1.1.1.1:0"}, wantError: true},
+		{name: "PortTooLarge", resolvers: []string{"1.1.1.1:65536"}, wantError: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := validAcmeDNSSynologyConfig(t.TempDir())
+			cfg.DNS.Resolvers = tt.resolvers
+			err := validateConfigForSynology(cfg, false)
+			if (err != nil) != tt.wantError {
+				t.Fatalf("validateConfigForSynology() error = %v, wantError %v", err, tt.wantError)
+			}
+		})
+	}
+
+	cfg := validSynologyConfig(t.TempDir())
+	cfg.DNS.Resolvers = []string{"not-an-ip"}
+	if err := validateConfigForSynology(cfg, false); err != nil {
+		t.Fatalf("hidden non-ACME-DNS resolvers affected validation: %v", err)
 	}
 }
 
@@ -141,6 +585,26 @@ func TestSynologyRuntimeConfigStagingAndProduction(t *testing.T) {
 	production := cfg.RuntimeConfig(false)
 	if !production.ZeroSSLCA || production.StorageDir != cfg.Runtime.StorageDir {
 		t.Fatalf("unexpected production runtime: %+v", production)
+	}
+}
+
+func TestSynologyRuntimeConfigScopesResolversToAcmeDNS(t *testing.T) {
+	cfg := validSynologyConfig(t.TempDir())
+	cfg.DNS.Resolvers = []string{"1.1.1.1", "8.8.8.8"}
+	if got := cfg.RuntimeConfig(true).DNSResolvers; len(got) != 0 {
+		t.Fatalf("non-ACME-DNS runtime received resolvers: %#v", got)
+	}
+
+	cfg = validAcmeDNSSynologyConfig(t.TempDir())
+	want := []string{"1.1.1.1", "8.8.8.8"}
+	cfg.DNS.Resolvers = want
+	got := cfg.RuntimeConfig(false).DNSResolvers
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("ACME-DNS runtime resolvers = %#v, want %#v", got, want)
+	}
+	want[0] = "changed"
+	if got[0] != "1.1.1.1" {
+		t.Fatal("runtime retained the persisted resolver slice")
 	}
 }
 
@@ -165,13 +629,36 @@ func TestLegacyForceStagingCannotAffectProductionRuntime(t *testing.T) {
 
 func TestConfigHashKeepsLegacyProductionShape(t *testing.T) {
 	cfg := normalizeSynologyConfig(validSynologyConfig(t.TempDir()))
+	type legacyACMEConfig struct {
+		Domains []string `json:"domains"`
+		Email   string   `json:"email"`
+		KeyType string   `json:"keyType"`
+		CA      string   `json:"ca"`
+	}
+	type legacyDNSConfig struct {
+		Provider string            `json:"provider"`
+		Config   map[string]string `json:"config"`
+	}
 	legacyShape := struct {
-		ACME         SynologyACMEConfig    `json:"acme"`
-		DNS          SynologyDNSConfig     `json:"dns"`
+		ACME         legacyACMEConfig      `json:"acme"`
+		DNS          legacyDNSConfig       `json:"dns"`
 		Synology     SynologyDeployConfig  `json:"synology"`
 		Runtime      SynologyRuntimeConfig `json:"runtime"`
 		ForceStaging bool                  `json:"forceStaging"`
-	}{cfg.ACME, cfg.DNS, cfg.Synology, cfg.Runtime, false}
+	}{
+		ACME: legacyACMEConfig{
+			Domains: cfg.ACME.Domains,
+			Email:   cfg.ACME.Email,
+			KeyType: cfg.ACME.KeyType,
+			CA:      cfg.ACME.CA,
+		},
+		DNS: legacyDNSConfig{
+			Provider: cfg.DNS.Provider,
+			Config:   cfg.DNS.Config,
+		},
+		Synology: cfg.Synology,
+		Runtime:  cfg.Runtime,
+	}
 	data, err := json.Marshal(legacyShape)
 	if err != nil {
 		t.Fatal(err)
@@ -179,6 +666,11 @@ func TestConfigHashKeepsLegacyProductionShape(t *testing.T) {
 	want := sha256.Sum256(data)
 	if got := cfg.ConfigHash(); got != hex.EncodeToString(want[:]) {
 		t.Fatalf("production config hash changed across ForceStaging removal: got %s", got)
+	}
+	cfg.DNS.Resolvers = nil
+	cfg.LastApply = SynologyOperationState{Success: true, ConfigHash: hex.EncodeToString(want[:])}
+	if !cfg.CanRenew() {
+		t.Fatal("defaulting a legacy missing resolver field closed the renewal gate")
 	}
 	legacyShape.ForceStaging = true
 	data, err = json.Marshal(legacyShape)
@@ -189,6 +681,31 @@ func TestConfigHashKeepsLegacyProductionShape(t *testing.T) {
 	cfg.LastApply = SynologyOperationState{Success: true, ConfigHash: hex.EncodeToString(stagingHash[:])}
 	if cfg.CanRenew() {
 		t.Fatal("a legacy staging deployment must not renew after the option is removed")
+	}
+}
+
+func TestResolverChangePreservesConfigHashAndRenewalGate(t *testing.T) {
+	cfg := validAcmeDNSSynologyConfig(t.TempDir())
+	hash := cfg.ConfigHash()
+	runtimeKey := cfg.RenewalRuntimeKey()
+	cfg.LastApply = SynologyOperationState{Success: true, ConfigHash: hash}
+	cfg.DNS.Resolvers = []string{"8.8.8.8"}
+
+	if got := cfg.ConfigHash(); got != hash {
+		t.Fatalf("resolver-only change altered config hash: got %s, want %s", got, hash)
+	}
+	if !cfg.CanRenew() {
+		t.Fatal("resolver-only change closed the renewal gate")
+	}
+	if got := cfg.RenewalRuntimeKey(); got == runtimeKey {
+		t.Fatal("resolver-only change did not alter renewal runtime key")
+	}
+
+	nonAcmeDNS := validSynologyConfig(t.TempDir())
+	runtimeKey = nonAcmeDNS.RenewalRuntimeKey()
+	nonAcmeDNS.DNS.Resolvers = []string{"8.8.8.8"}
+	if got := nonAcmeDNS.RenewalRuntimeKey(); got != runtimeKey {
+		t.Fatal("hidden non-ACME-DNS resolver changed renewal runtime key")
 	}
 }
 
@@ -248,10 +765,10 @@ func TestProviderMetadataAndRedaction(t *testing.T) {
 }
 
 func TestProviderMetadata_CompleteCatalog(t *testing.T) {
-	want := expectedProviderDefinitions()
-	if len(provider.Definitions()) != len(want) {
-		t.Skip("complete catalog compatibility requires a non-slim build")
+	if provider.Default() != provider.Cloudflare {
+		return // slim build has a deliberately smaller, build-selected catalog.
 	}
+	want := expectedProviderDefinitions()
 	if got := provider.Definitions(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("provider definitions = %#v, want %#v", got, want)
 	}
@@ -289,8 +806,8 @@ func TestCGIMetadata_JSONCompatibility(t *testing.T) {
 	if !resp.Success {
 		t.Fatalf("metadata CGI failed: %s", resp.Error)
 	}
-	if len(provider.Definitions()) != len(expectedProviderDefinitions()) {
-		t.Skip("complete catalog compatibility requires a non-slim build")
+	if provider.Default() != provider.Cloudflare {
+		return
 	}
 	want, err := json.Marshal(map[string]any{"providers": expectedProviderDefinitions()})
 	if err != nil {
@@ -305,6 +822,13 @@ func expectedProviderDefinitions() []provider.Definition {
 	return []provider.Definition{
 		{Name: provider.Cloudflare, Label: "Cloudflare", Fields: []provider.Field{
 			{Key: provider.CloudflareAPIToken, Label: "API Token", Secret: true, Required: true, Placeholder: "Zone DNS edit token"},
+		}},
+		{Name: provider.AcmeDNS, Label: "ACME-DNS", Fields: []provider.Field{
+			{Key: provider.AcmeDNSUsername, Label: "Username", Required: true},
+			{Key: provider.AcmeDNSPassword, Label: "Password", Secret: true, Required: true},
+			{Key: provider.AcmeDNSSubdomain, Label: "Subdomain", Required: true, Placeholder: "e.g. 8c72f60d"},
+			{Key: provider.AcmeDNSFullDomain, Label: "Full Domain", Required: true, Placeholder: "e.g. 8c72f60d.auth.acme-dns.io"},
+			{Key: provider.AcmeDNSServerURL, Label: "Server URL", Required: true, Placeholder: "https://auth.acme-dns.io"},
 		}},
 		{Name: provider.AliDNS, Label: "AliDNS", Fields: []provider.Field{
 			{Key: provider.AliDNSAccessKeyID, Label: "AccessKey ID", Required: true, Placeholder: "LTAI..."},
@@ -327,6 +851,9 @@ func expectedProviderDefinitions() []provider.Definition {
 		}},
 		{Name: provider.GoDaddy, Label: "GoDaddy", Fields: []provider.Field{
 			{Key: provider.GoDaddyAPIToken, Label: "API Token", Secret: true, Required: true, Placeholder: "key:secret"},
+		}},
+		{Name: provider.HetznerCloud, Label: "Hetzner Cloud", Fields: []provider.Field{
+			{Key: provider.HetznerCloudAPIToken, Label: "API Token", Secret: true, Required: true, Placeholder: "Hetzner Cloud API token"},
 		}},
 		{Name: provider.HuaweiCloud, Label: "Huawei Cloud DNS", Fields: []provider.Field{
 			{Key: provider.HuaweiCloudAccessKeyID, Label: "AccessKey ID", Required: true, Placeholder: "access key id"},
@@ -556,10 +1083,10 @@ func TestCGIReconfigurePersistsWithoutInvalidatingRenewal(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := cgiReconfigure(http.MethodGet, path); err == nil {
+	if _, err := cgiReconfigure(http.MethodGet, path, nil); err == nil {
 		t.Fatal("GET must not enable reconfiguration mode")
 	}
-	if _, err := cgiReconfigure(http.MethodPost, path); err != nil {
+	if _, err := cgiReconfigure(http.MethodPost, path, nil); err != nil {
 		t.Fatal(err)
 	}
 	loaded, err := loadSynologyConfig(path)
@@ -592,6 +1119,52 @@ func TestCGIReconfigurePersistsWithoutInvalidatingRenewal(t *testing.T) {
 	}
 	if !loaded.Reconfiguring {
 		t.Fatal("normal config save cleared reconfiguration mode")
+	}
+}
+
+func TestCGIReconfigureOptionalEditTokenCompareAndSwap(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := saveSynologyConfig(path, validSynologyConfig(t.TempDir())); err != nil {
+		t.Fatal(err)
+	}
+	initial, err := cgiConfig(http.MethodGet, path, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	staleToken := initial.(map[string]any)["editToken"].(string)
+	if _, err := mutateSynologyConfig(path, func(cfg *SynologyConfig, _ string) (bool, error) {
+		cfg.ACME.Email = "changed@example.com"
+		return true, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	staleBody := strings.NewReader(`{"editToken":` + strconv.Quote(staleToken) + `}`)
+	if _, err := cgiReconfigure(http.MethodPost, path, staleBody); !errors.Is(err, errSynologyConfigChanged) {
+		t.Fatalf("stale reconfigure error = %v, want configuration changed", err)
+	}
+	loaded, err := loadSynologyConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Reconfiguring {
+		t.Fatal("stale reconfigure changed the persisted state")
+	}
+	current, err := cgiConfig(http.MethodGet, path, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	currentToken := current.(map[string]any)["editToken"].(string)
+	response, err := cgiReconfigure(http.MethodPost, path, strings.NewReader(`{"editToken":`+strconv.Quote(currentToken)+`}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.(map[string]any)["editToken"] == currentToken {
+		t.Fatal("successful reconfigure did not return a new edit token")
+	}
+
+	// Older cached clients did not send an edit token and remain supported.
+	if _, err := cgiReconfigure(http.MethodPost, path, nil); err != nil {
+		t.Fatalf("legacy reconfigure without token failed: %v", err)
 	}
 }
 
@@ -721,6 +1294,9 @@ func TestRunSynologyTestAndApply(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertTaskResultRedacted(t, result)
+	if result.EditToken == "" {
+		t.Fatal("test result is missing edit token")
+	}
 	if !result.Config.LastTest.Success {
 		t.Fatalf("unexpected test result: %+v", result)
 	}
@@ -741,6 +1317,9 @@ func TestRunSynologyTestAndApply(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertTaskResultRedacted(t, result)
+	if result.EditToken == "" {
+		t.Fatal("apply result is missing edit token")
+	}
 	if result.State != "ok" {
 		t.Fatalf("unexpected apply state: %s", result.State)
 	}
@@ -824,7 +1403,12 @@ func TestCGITestRunAndApplyActions(t *testing.T) {
 	defer func() { manageCertificates = oldManage }()
 
 	var out bytes.Buffer
-	err := serveSynologyCGI(context.Background(), path, queryEnv("action=test-run", http.MethodPost), strings.NewReader("{}"), &out)
+	snapshot, err := loadSynologyConfigSnapshot(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	testBody := strings.NewReader(`{"editToken":` + strconv.Quote(snapshot.EditToken) + `}`)
+	err = serveSynologyCGI(context.Background(), path, queryEnv("action=test-run", http.MethodPost), testBody, &out)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -837,10 +1421,14 @@ func TestCGITestRunAndApplyActions(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertTaskResultRedacted(t, result)
+	if result.EditToken == "" {
+		t.Fatal("test-run CGI response is missing edit token")
+	}
 
 	writeStoredCert(t, cfg.Runtime.StorageDir, cfg.ACME.Domains[0])
 	out.Reset()
-	err = serveSynologyCGI(context.Background(), path, queryEnv("action=apply", http.MethodPost), strings.NewReader("{}"), &out)
+	applyBody := strings.NewReader(`{"editToken":` + strconv.Quote(result.EditToken) + `}`)
+	err = serveSynologyCGI(context.Background(), path, queryEnv("action=apply", http.MethodPost), applyBody, &out)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -852,6 +1440,64 @@ func TestCGITestRunAndApplyActions(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertTaskResultRedacted(t, result)
+	if result.EditToken == "" {
+		t.Fatal("apply CGI response is missing edit token")
+	}
+}
+
+func TestCGITaskActionsRejectStaleEditToken(t *testing.T) {
+	for _, action := range []string{"test-run", "apply"} {
+		t.Run(action, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.yaml")
+			if err := saveSynologyConfig(path, validSynologyConfig(t.TempDir())); err != nil {
+				t.Fatal(err)
+			}
+			snapshot, err := loadSynologyConfigSnapshot(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if _, err := mutateSynologyConfig(path, func(cfg *SynologyConfig, _ string) (bool, error) {
+				cfg.ACME.Email = "changed@example.com"
+				return true, nil
+			}); err != nil {
+				t.Fatal(err)
+			}
+			var out bytes.Buffer
+			body := strings.NewReader(`{"editToken":` + strconv.Quote(snapshot.EditToken) + `}`)
+			if err := serveSynologyCGI(context.Background(), path, queryEnv("action="+action, http.MethodPost), body, &out); err != nil {
+				t.Fatal(err)
+			}
+			response := parseCGIResponse(t, out.String())
+			if response.Success || !strings.Contains(response.Error, errSynologyConfigChanged.Error()) {
+				t.Fatalf("stale token response = %+v", response)
+			}
+		})
+	}
+}
+
+func TestDecodeSynologyTaskEditTokenSupportsCachedClients(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		body string
+		want string
+	}{
+		{name: "current", body: `{"editToken":"current-token"}`, want: "current-token"},
+		{name: "cached", body: `{}`, want: ""},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := decodeSynologyTaskEditToken(strings.NewReader(test.body))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != test.want {
+				t.Fatalf("edit token = %q, want %q", got, test.want)
+			}
+		})
+	}
+	if _, err := decodeSynologyTaskEditToken(strings.NewReader("{")); err == nil {
+		t.Fatal("invalid JSON was accepted")
+	}
 }
 
 func TestRunSynologyApplyWithoutTest(t *testing.T) {
@@ -1063,7 +1709,7 @@ func TestMonitorSynologyConfigChange(t *testing.T) {
 	if err := saveSynologyConfig(path, cfg); err != nil {
 		t.Fatal(err)
 	}
-	activeHash := cfg.ConfigHash()
+	activeKey := cfg.RenewalRuntimeKey()
 
 	oldRetry := synologyDaemonRetryInterval
 	synologyDaemonRetryInterval = time.Millisecond
@@ -1075,7 +1721,7 @@ func TestMonitorSynologyConfigChange(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
-	if !monitorSynologyConfigChange(ctx, path, activeHash) {
+	if !monitorSynologyConfigChange(ctx, path, activeKey) {
 		t.Fatal("expected changed config to trigger daemon reload")
 	}
 
@@ -1089,8 +1735,46 @@ func TestMonitorSynologyConfigChange(t *testing.T) {
 	}
 	ctx, cancel = context.WithTimeout(context.Background(), 3*time.Millisecond)
 	defer cancel()
-	if monitorSynologyConfigChange(ctx, path, unchanged.ConfigHash()) {
+	if monitorSynologyConfigChange(ctx, path, unchanged.RenewalRuntimeKey()) {
 		t.Fatal("unchanged renewable config should wait until context cancellation")
+	}
+
+	unchanged.Reconfiguring = true
+	if err := saveSynologyConfig(path, unchanged); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	if !monitorSynologyConfigChange(ctx, path, unchanged.RenewalRuntimeKey()) {
+		t.Fatal("reconfiguration should stop the active renewal manager")
+	}
+}
+
+func TestMonitorSynologyConfigChangeReloadsResolverWithoutClosingRenewalGate(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	cfg := validAcmeDNSSynologyConfig(dir)
+	cfg.LastApply = SynologyOperationState{Success: true, At: time.Now(), ConfigHash: cfg.ConfigHash()}
+	if err := saveSynologyConfig(path, cfg); err != nil {
+		t.Fatal(err)
+	}
+	activeKey := cfg.RenewalRuntimeKey()
+
+	cfg.DNS.Resolvers = []string{"8.8.8.8"}
+	if !cfg.CanRenew() {
+		t.Fatal("resolver-only change unexpectedly closed renewal gate")
+	}
+	if err := saveSynologyConfig(path, cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	oldRetry := synologyDaemonRetryInterval
+	synologyDaemonRetryInterval = time.Millisecond
+	defer func() { synologyDaemonRetryInterval = oldRetry }()
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	if !monitorSynologyConfigChange(ctx, path, activeKey) {
+		t.Fatal("resolver-only change did not reload active renewal manager")
 	}
 }
 
@@ -1195,6 +1879,38 @@ func TestSynologyApplyValidationAndCertificateLookupFailures(t *testing.T) {
 	cfg.ACME.Domains = []string{"example.com", "*.example.com"}
 	if err := validateConfigForSynology(cfg, true); err == nil || !strings.Contains(err.Error(), "exactly one") {
 		t.Fatalf("expected multi-domain Synology validation error, got %v", err)
+	}
+}
+
+func TestSynologyApplyValidationFailureReplacesStaleSuccess(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	cfg := validAcmeDNSSynologyConfig(dir)
+	hash := cfg.ConfigHash()
+	cfg.LastApply = SynologyOperationState{
+		Success:    true,
+		At:         time.Now(),
+		ConfigHash: hash,
+		Message:    "production certificate applied",
+	}
+	cfg.DNS.Resolvers = []string{"not-an-ip"}
+	if err := saveSynologyConfig(path, cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := runSynologyApply(context.Background(), path)
+	if err == nil || !strings.Contains(err.Error(), "invalid recursive DNS resolver") {
+		t.Fatalf("expected resolver validation error, got %v", err)
+	}
+	if result.Config.LastApply.Success || !strings.Contains(result.Config.LastApply.Message, "invalid recursive DNS resolver") {
+		t.Fatalf("task result kept stale apply state: %+v", result.Config.LastApply)
+	}
+	loaded, loadErr := loadSynologyConfig(path)
+	if loadErr != nil {
+		t.Fatal(loadErr)
+	}
+	if loaded.CanRenew() || loaded.LastApply.Success || !strings.Contains(loaded.LastApply.Message, "invalid recursive DNS resolver") {
+		t.Fatalf("persisted config kept stale apply state: %+v", loaded.LastApply)
 	}
 }
 
@@ -1339,6 +2055,19 @@ func validSynologyConfig(dir string) SynologyConfig {
 	cfg.Runtime.StorageDir = filepath.Join(dir, "certmagic")
 	cfg.Runtime.StagingDir = filepath.Join(dir, "staging")
 	cfg.Runtime.LogPath = filepath.Join(dir, "dnsacme.log")
+	return cfg
+}
+
+func validAcmeDNSSynologyConfig(dir string) SynologyConfig {
+	cfg := validSynologyConfig(dir)
+	cfg.DNS.Provider = provider.AcmeDNS
+	cfg.DNS.Config = map[string]string{
+		provider.AcmeDNSUsername:   "username",
+		provider.AcmeDNSPassword:   "password",
+		provider.AcmeDNSSubdomain:  "account",
+		provider.AcmeDNSFullDomain: "account.auth.acme-dns.io",
+		provider.AcmeDNSServerURL:  "https://auth.acme-dns.io",
+	}
 	return cfg
 }
 

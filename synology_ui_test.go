@@ -621,6 +621,11 @@ func TestSynologyUIClampsInitialSizeAndReflowsNestedCards(t *testing.T) {
 	source := string(sourceBytes)
 
 	for _, marker := range []string{
+		"height: 740,",
+		"minHeight: 740,",
+		"FORM_COLUMN_OFFSET: 20,",
+		"Math.min(me.FORM_COLUMN_OFFSET, Math.max(0, gutter - me.COLUMN_GUTTER))",
+		`paddingLeft: leftGutter + "px", paddingRight: rightGutter + "px"`,
 		"me.fitInitialWindowSize(windowConfig);",
 		"config.width = Math.max(minWidth, Math.min(requestedWidth, maxWidth));",
 		"config.height = Math.max(minHeight, Math.min(requestedHeight, maxHeight));",
@@ -639,6 +644,205 @@ func TestSynologyUIClampsInitialSizeAndReflowsNestedCards(t *testing.T) {
 	}
 	if strings.Count(source, `layout: "anchor"`) < 3 {
 		t.Fatal("centered cards no longer resize their children")
+	}
+}
+
+func TestSynologyUIProviderSwitchPreservesDraftAndAvoidsSideErrorIcons(t *testing.T) {
+	data, err := os.ReadFile("synology/spk/ui/DNSACME.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(data)
+	for _, marker := range []string{
+		"me.providerDrafts = {};",
+		"me.renderedProviderName = null;",
+		"if (!me._skipProviderDraftCapture) { me.captureProviderDraft(); }",
+		"Object.prototype.hasOwnProperty.call(draft.config, f.key)",
+		"configuredProvider === prov.name && me.cfg.dns.config && me.cfg.dns.config[f.key]",
+		"captureProviderDraft: function () {",
+		"config[field.providerKey] = field.getValue();",
+		"draft.resolverText = me.fAcmeDNSResolvers.getValue();",
+		"acmeDNSDraft.resolverText !== undefined",
+		"me._skipProviderDraftCapture = true;",
+	} {
+		if !strings.Contains(source, marker) {
+			t.Fatalf("provider draft preservation is missing %q", marker)
+		}
+	}
+	if strings.Count(source, `msgTarget: "qtip"`) < 2 {
+		t.Fatal("dynamic provider fields still use side error icons that outlive destroyed elements")
+	}
+	start := strings.Index(source, "  renderProviderFields: function () {")
+	end := strings.Index(source[start:], "\n\n  captureProviderDraft:")
+	if start < 0 || end < 0 {
+		t.Fatal("dynamic provider render block not found")
+	}
+	if strings.Contains(source[start:start+end], `msgTarget: "side"`) {
+		t.Fatal("dynamic provider fields still create side error icons")
+	}
+}
+
+func TestSynologyUIProviderSwitchOverridesParentValidationDefaultAfterInsertion(t *testing.T) {
+	data, err := os.ReadFile("synology/spk/ui/DNSACME.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(data)
+	for _, marker := range []string{
+		`useTooltipValidation: function (field) {`,
+		`if (field) { field.msgTarget = "qtip"; }`,
+		"target.add(field);\n        // Container defaults are applied during add()",
+		"me.useTooltipValidation(field);",
+		"target.insert(serverIndex + 2, me.acmeDNSPanel);\n    // The parent form applies its \"side\" default during insert()",
+		"me.useTooltipValidation(me.fAcmeDNSServer);",
+		"me.useTooltipValidation(me.acmeDNSRegisterRow);",
+		"me.useTooltipValidation(me.fAcmeDNSResolvers);",
+	} {
+		if !strings.Contains(source, marker) {
+			t.Fatalf("dynamic validation target is not restored after parent insertion: %q", marker)
+		}
+	}
+}
+
+func TestSynologyUIAcmeDNSRegistrationSurvivesProviderSwitch(t *testing.T) {
+	data, err := os.ReadFile("synology/spk/ui/DNSACME.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(data)
+	start := strings.Index(source, "  hydrateAcmeDNSAccount: function (account, server) {")
+	end := strings.Index(source[start:], "\n\n  // Mask the whole panel")
+	if start < 0 || end < 0 {
+		t.Fatal("ACME-DNS account hydration block not found")
+	}
+	block := source[start : start+end]
+	storeDraft := strings.Index(block, `this.mergeProviderDraftConfig("acmedns", values);`)
+	hydrateFields := strings.Index(block, "Ext.each(this.providerFields")
+	if storeDraft < 0 || hydrateFields < 0 || storeDraft > hydrateFields {
+		t.Fatal("registration credentials are not stored in the ACME-DNS draft before current fields are hydrated")
+	}
+	for _, marker := range []string{
+		`mergeProviderDraftConfig: function (providerName, values) {`,
+		"draft.config = draft.config || {};",
+		"Ext.apply(draft.config, values || {});",
+		"disabled: !!me._acmeDNSRegistering,",
+	} {
+		if !strings.Contains(source, marker) {
+			t.Fatalf("provider-switch-safe ACME-DNS registration is missing %q", marker)
+		}
+	}
+}
+
+func TestSynologyUIProviderDraftsOwnSelectedConfigCollection(t *testing.T) {
+	data, err := os.ReadFile("synology/spk/ui/DNSACME.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(data)
+
+	captureStart := strings.Index(source, "  captureProviderDraft: function () {")
+	captureEnd := strings.Index(source[captureStart:], "\n\n  mergeProviderDraftConfig:")
+	if captureStart < 0 || captureEnd < 0 {
+		t.Fatal("captureProviderDraft block not found")
+	}
+	capture := source[captureStart : captureStart+captureEnd]
+	for _, marker := range []string{
+		"var draft = me.providerDrafts[providerName] || {};",
+		"var config = {};",
+		"config[field.providerKey] = field.getValue();",
+		"draft.config = config;",
+		"draft.resolverText = me.fAcmeDNSResolvers.getValue();",
+	} {
+		if !strings.Contains(capture, marker) {
+			t.Fatalf("provider draft capture does not preserve metadata while replacing current config: %q", marker)
+		}
+	}
+
+	collectStart := strings.Index(source, "  collectConfig: function () {")
+	collectEnd := strings.Index(source[collectStart:], "\n\n  save: function")
+	if collectStart < 0 || collectEnd < 0 {
+		t.Fatal("collectConfig block not found")
+	}
+	collect := source[collectStart : collectStart+collectEnd]
+	for _, marker := range []string{
+		"me.captureProviderDraft();",
+		"var selectedProvider = me.fProvider.getValue();",
+		"var selectedDraft = me.providerDrafts[selectedProvider] || { config: {} };",
+		"var dnsConfig = Ext.apply({}, selectedDraft.config || {});",
+		"if (selectedProvider === \"acmedns\") {",
+		"(selectedDraft.resolverText || \"\").split(\",\")",
+		"dns: { provider: selectedProvider, config: dnsConfig, resolvers: resolvers }",
+	} {
+		if !strings.Contains(collect, marker) {
+			t.Fatalf("collectConfig does not derive the request from the selected provider draft: %q", marker)
+		}
+	}
+	if strings.Contains(collect, "cfg.dns.config") {
+		t.Fatal("collectConfig falls back to a non-current provider config")
+	}
+
+	renderStart := strings.Index(source, "  renderProviderFields: function () {")
+	renderEnd := strings.Index(source[renderStart:], "\n\n  captureProviderDraft:")
+	if renderStart < 0 || renderEnd < 0 {
+		t.Fatal("renderProviderFields block not found")
+	}
+	render := source[renderStart : renderStart+renderEnd]
+	configuredProvider := strings.Index(render, "var configuredProvider = me.cfg && me.cfg.dns && me.cfg.dns.provider;")
+	persistedFallback := strings.Index(render, "configuredProvider === prov.name && me.cfg.dns.config && me.cfg.dns.config[f.key]")
+	if configuredProvider < 0 || persistedFallback < 0 || configuredProvider > persistedFallback {
+		t.Fatal("provider fields may hydrate an unselected provider from the configured provider's persisted config")
+	}
+}
+
+func TestSynologyUIHTTP0ReconciliationRequiresOperationChange(t *testing.T) {
+	data, err := os.ReadFile("synology/spk/ui/DNSACME.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(data)
+
+	fingerprintStart := strings.Index(source, "  operationStateFingerprint: function (action, source) {")
+	fingerprintEnd := strings.Index(source[fingerprintStart:], "\n\n  reconcileActionState:")
+	if fingerprintStart < 0 || fingerprintEnd < 0 {
+		t.Fatal("operationStateFingerprint block not found")
+	}
+	fingerprint := source[fingerprintStart : fingerprintStart+fingerprintEnd]
+	if !strings.Contains(fingerprint, `return [operation.success ? "1" : "0", String(operation.at || ""), String(operation.message || "")].join("\n");`) {
+		t.Fatal("operation fingerprint must include normalized success, at, and message")
+	}
+
+	runStart := strings.Index(source, "  runAction: function (action) {")
+	runEnd := strings.Index(source[runStart:], "\n\n  // finishAction")
+	if runStart < 0 || runEnd < 0 {
+		t.Fatal("runAction block not found")
+	}
+	run := source[runStart : runStart+runEnd]
+	baseline := strings.Index(run, "var operationBaseline = me.operationStateFingerprint(action, me.cfg);")
+	request := strings.Index(run, `SYNO.SDS.DNSACME.request(action, "POST", { editToken: me.configEditToken }`)
+	if baseline < 0 || request < 0 || baseline > request {
+		t.Fatal("runAction must capture the operation fingerprint after save and before the action request")
+	}
+	if !strings.Contains(run, "me.reconcileActionState(action, data, operationBaseline);") {
+		t.Fatal("HTTP 0 reconciliation does not receive the pre-action operation fingerprint")
+	}
+
+	reconcileStart := strings.Index(source, "  reconcileActionState: function (action, errorText, operationBaseline) {")
+	reconcileEnd := strings.Index(source[reconcileStart:], "\n\n  settleActionFailure:")
+	if reconcileStart < 0 || reconcileEnd < 0 {
+		t.Fatal("reconcileActionState block not found")
+	}
+	reconcile := source[reconcileStart : reconcileStart+reconcileEnd]
+	for _, marker := range []string{
+		"var currentOperation = ok ? me.operationState(action, data) : {};",
+		"var operationChanged = ok && me.operationStateFingerprint(action, data) !== operationBaseline;",
+		"var completed = operationChanged && currentOperation.success && (",
+		"if (operationChanged) {",
+		"me.settleActionFailure(action, data, errorText);",
+		"me.settleActionFailure(action, null, ok ? errorText : data);",
+	} {
+		if !strings.Contains(reconcile, marker) {
+			t.Fatalf("HTTP 0 reconciliation does not distinguish changed operation state: %q", marker)
+		}
 	}
 }
 
@@ -742,6 +946,103 @@ func TestSynologyUIApplySuccessUsesReturnedConfigWithoutReload(t *testing.T) {
 	}
 }
 
+func TestSynologyUIStatusReconciliationPreservesEditToken(t *testing.T) {
+	data, err := os.ReadFile("synology/spk/ui/DNSACME.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(data)
+	if !strings.Contains(source, `{ config: { lastTest: data.lastTest }, editToken: data.editToken }`) {
+		t.Fatal("test-run status reconciliation drops the config edit token")
+	}
+}
+
+func TestSynologyUIAcmeDNSResolversRoundTrip(t *testing.T) {
+	data, err := os.ReadFile("synology/spk/ui/DNSACME.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(data)
+	for _, marker := range []string{
+		`"field.acmeDNSResolvers": "Recursive DNS"`,
+		`"field.acmeDNSResolvers": "递归 DNS"`,
+		`"placeholder.acmeDNSResolvers": "1.1.1.1, 8.8.8.8"`,
+		`var resolverValue = acmeDNSDraft && acmeDNSDraft.resolverText !== undefined`,
+		`: (resolverValues.join(", ") || "1.1.1.1");`,
+		`fieldLabel: SYNO.SDS.DNSACME.t("field.acmeDNSResolvers") + "*"`,
+		`dns: { provider: selectedProvider, config: dnsConfig, resolvers: resolvers }`,
+	} {
+		if !strings.Contains(source, marker) {
+			t.Fatalf("ACME-DNS resolver UI is missing %q", marker)
+		}
+	}
+}
+
+func TestSynologyUIProviderCleanupPrecedesDynamicDestruction(t *testing.T) {
+	data, err := os.ReadFile("synology/spk/ui/DNSACME.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(data)
+	start := strings.Index(source, "  renderProviderFields: function () {")
+	end := strings.Index(source[start:], "\n\n  acmeDNSField:")
+	if start < 0 || end < 0 {
+		t.Fatal("renderProviderFields block not found")
+	}
+	block := source[start : start+end]
+	clear := strings.Index(block, "field.clearInvalid()")
+	destroyComposite := strings.Index(block, "target.remove(me.acmeDNSRegisterRow, true)")
+	if clear < 0 || destroyComposite < 0 || clear > destroyComposite {
+		t.Fatal("provider validation state is not cleared before the ACME-DNS CompositeField is destroyed")
+	}
+	if !strings.Contains(block, "fieldsToClear = me.providerFields.slice(0)") {
+		t.Fatal("cleanup does not include the nested ACME-DNS server field")
+	}
+	if !strings.Contains(block, "fieldsToClear.push(me.acmeDNSRegisterRow)") {
+		t.Fatal("cleanup does not include the ACME-DNS CompositeField")
+	}
+}
+
+func TestSynologyUIActionFailureSettlesWithoutFormRebuild(t *testing.T) {
+	data, err := os.ReadFile("synology/spk/ui/DNSACME.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(data)
+	for _, marker := range []string{
+		`body && body.data`,
+		`body = response.responseText ? Ext.decode(response.responseText) : null;`,
+		`body.error || SYNO.SDS.DNSACME.t("error.requestFailed"), body.data`,
+		`if (failureData) { me.settleActionFailure(action, failureData, data); }`,
+		`me.settleActionFailure(action, null, ok ? errorText : data);`,
+	} {
+		if !strings.Contains(source, marker) {
+			t.Fatalf("failure response settlement is missing %q", marker)
+		}
+	}
+	start := strings.Index(source, "  settleActionFailure: function (action, data, fallback) {")
+	end := strings.Index(source[start:], "\n\n  showActionFailure:")
+	if start < 0 || end < 0 {
+		t.Fatal("settleActionFailure block not found")
+	}
+	block := source[start : start+end]
+	for _, marker := range []string{
+		"me.setActionsBusy(false);",
+		"me.configEditToken = data.editToken;",
+		"me.loadLogs();",
+		"me.showActionFailure(action, reason);",
+	} {
+		if !strings.Contains(block, marker) {
+			t.Fatalf("local failure settlement is missing %q", marker)
+		}
+	}
+	for _, forbidden := range []string{"loadAll(", "applyConfig(", "renderProviderFields("} {
+		if strings.Contains(block, forbidden) {
+			t.Fatalf("local failure settlement must not rebuild the form through %q", forbidden)
+		}
+	}
+}
+
 func TestSynologyUIFailureDialogUsesLocalizedMessages(t *testing.T) {
 	sourceBytes, err := os.ReadFile("synology/spk/ui/DNSACME.js")
 	if err != nil {
@@ -799,6 +1100,276 @@ func TestSynologyUILogRefreshTargetsVisibleArea(t *testing.T) {
 		if strings.Contains(source, hiddenRefresh) {
 			t.Fatalf("log polling still refreshes a hidden area: %s", hiddenRefresh)
 		}
+	}
+}
+
+func TestSynologyUIAcmeDNSRegistrationFillsTheNormalForm(t *testing.T) {
+	data, err := os.ReadFile("synology/spk/ui/DNSACME.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(data)
+	for _, marker := range []string{
+		`SYNO.SDS.DNSACME.request("acmedns-register", "POST"`,
+		`title: SYNO.SDS.DNSACME.t("dialog.acmeDNSTrustTitle")`,
+		`buttons: Ext.MessageBox.YESNO`,
+		`if (button === "yes") { me.registerAcmeDNS(server); }`,
+		`handler: me.confirmAcmeDNSRegistration`,
+		`me.hydrateAcmeDNSAccount(data, data.serverURL || server);`,
+		`status.acmeDNSRegistered`,
+		`It will not be saved until you click Next.`,
+		`me.acmeDNSRegisterRow = new Ext.form.CompositeField({`,
+		`fieldLabel: SYNO.SDS.DNSACME.t("field.acmeDNSServer") + "*",`,
+		`me.fAcmeDNSServer.width = 205;`,
+		`width: 380,`,
+		`items: [me.fAcmeDNSServer, me.acmeDNSRegisterBtn]`,
+		`target.insert(serverIndex, me.acmeDNSRegisterRow);`,
+		`target.insert(serverIndex + 1, me.fAcmeDNSResolvers);`,
+		`target.insert(serverIndex + 2, me.acmeDNSPanel);`,
+		`me.acmeDNSCNAMEBox = me.acmeDNSPanel.items.itemAt(1);`,
+	} {
+		if !strings.Contains(source, marker) {
+			t.Fatalf("explicit ACME-DNS registration flow is missing %q", marker)
+		}
+	}
+	if !strings.Contains(source, `.dnsacme-acmedns-register-row .x-form-element { display:flex; align-items:center; }`) {
+		t.Fatal("ACME-DNS register row does not keep the input and button aligned")
+	}
+	if !strings.Contains(source, `.dnsacme-acmedns-register-row { margin-left:-8px; }`) {
+		t.Fatal("ACME-DNS register row does not cancel CompositeField's label padding")
+	}
+	if !strings.Contains(source, `.dnsacme-acmedns { margin:2px 0 12px 160px; width:380px; max-width:380px; box-sizing:border-box; }`) {
+		t.Fatal("ACME-DNS details panel is not aligned and width-bounded")
+	}
+	if !strings.Contains(source, `border: false, width: 380, cls: "dnsacme-acmedns"`) {
+		t.Fatal("ACME-DNS panel does not give ExtJS an explicit body width")
+	}
+	for _, marker := range []string{
+		`.dnsacme-acmedns-copy-btn { flex:0 0 auto; min-width:48px; min-height:24px;`,
+		`.dnsacme-acmedns-copy-btn:hover { background:#dce7f0; }`,
+		`.dnsacme-acmedns-copy-btn:focus { outline:1px solid #057feb; outline-offset:1px; }`,
+	} {
+		if !strings.Contains(source, marker) {
+			t.Fatalf("ACME-DNS copy button styling is missing %q", marker)
+		}
+	}
+	if strings.Contains(source, "me.acmeDNSPanel.items.itemAt(2)") {
+		t.Fatal("ACME-DNS panel still treats the register button as a second owner")
+	}
+	for _, marker := range []string{
+		`ACMEDNS_USERNAME: { label: "field.acmeDNSUsername" }`,
+		`ACMEDNS_PASSWORD: { label: "field.acmeDNSPassword" }`,
+		`ACMEDNS_SUBDOMAIN: { label: "field.acmeDNSSubdomain", placeholder: "placeholder.acmeDNSSubdomain" }`,
+		`ACMEDNS_FULLDOMAIN: { label: "field.acmeDNSFullDomain", placeholder: "placeholder.acmeDNSFullDomain" }`,
+		`"placeholder.acmeDNSSubdomain": "注册返回的 subdomain, 如 8c72f60d"`,
+		`"placeholder.acmeDNSFullDomain": "如 8c72f60d.auth.acme-dns.io"`,
+		`fieldLabel: fieldLabel + (f.required ? "*" : "")`,
+		`labelSeparator: ":"`,
+		`labelPad: 8`,
+	} {
+		if !strings.Contains(source, marker) {
+			t.Fatalf("localized ACME-DNS field guidance is missing %q", marker)
+		}
+	}
+	if strings.Contains(source, `fieldLabel + (f.required ? " *" : "")`) {
+		t.Fatal("required marker still has a gap before the asterisk")
+	}
+	for _, blockName := range []string{"loadAll: function", "save: function", "runAction: function"} {
+		start := strings.Index(source, blockName)
+		if start < 0 {
+			t.Fatalf("%s block not found", blockName)
+		}
+		end := strings.Index(source[start+1:], "\n  },")
+		if end < 0 {
+			t.Fatalf("%s block end not found", blockName)
+		}
+		if strings.Contains(source[start:start+1+end], `"acmedns-register"`) {
+			t.Fatalf("%s must not invoke ACME-DNS registration", blockName)
+		}
+	}
+}
+
+func TestSynologyUIFormLabelsReserveInputGap(t *testing.T) {
+	data, err := os.ReadFile("synology/spk/ui/DNSACME.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(data)
+	for _, marker := range []string{
+		`SYNO.SDS.DNSACME.FORM_LABEL_GAP = SYNO.SDS.DNSACME.LOCALE === "zh-CN" ? 3 : 8;`,
+		`".dnsacme-content-form .x-form-item-label { box-sizing:border-box; padding-right:" + SYNO.SDS.DNSACME.FORM_LABEL_GAP + "px !important; }"`,
+	} {
+		if !strings.Contains(source, marker) {
+			t.Fatalf("form labels do not reserve a locale-aware input gap: %q", marker)
+		}
+	}
+}
+
+func TestSynologyUIAcmeDNSCNAMEIsLiveEscapedAndCopyable(t *testing.T) {
+	data, err := os.ReadFile("synology/spk/ui/DNSACME.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(data)
+	for _, marker := range []string{
+		`var encodedSource = Ext.util.Format.htmlEncode(cname.source || "-");`,
+		`var encodedTarget = Ext.util.Format.htmlEncode(cname.target || "-");`,
+		`if (!cname.source || !cname.target) {`,
+		`bindAcmeDNSCNAMEInput: function (field)`,
+		`field.on("change", refresh, me);`,
+		`cmp.getEl().on("input", refresh);`,
+		`cmp.getEl().on("paste", refresh);`,
+		`cmp.getEl().on("keyup", refresh);`,
+		`if (field.rendered) { bindDOM(field); }`,
+		`else { field.on("afterrender", bindDOM, me, { single: true }); }`,
+		`class="dnsacme-acmedns-copy-btn"`,
+		`copyAcmeDNSValue: function (value)`,
+		`document.execCommand("copy")`,
+		`var safeServer = Ext.util.Format.htmlEncode(server);`,
+		`server: safeServer`,
+		`This delegated server can satisfy DNS challenges and request certificates for this domain.`,
+	} {
+		if !strings.Contains(source, marker) {
+			t.Fatalf("safe CNAME handoff is missing %q", marker)
+		}
+	}
+}
+
+func TestSynologyUIAcmeDNSCNAMERefreshesAfterPersistedFieldsHydrate(t *testing.T) {
+	data, err := os.ReadFile("synology/spk/ui/DNSACME.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(data)
+	start := strings.Index(source, "  renderProviderFields: function () {")
+	end := strings.Index(source[start:], "\n\n  acmeDNSField:")
+	if start < 0 || end < 0 {
+		t.Fatal("renderProviderFields block not found")
+	}
+	block := source[start : start+end]
+	if strings.Count(block, "me.renderAcmeDNSCNAME();") < 2 {
+		t.Fatal("persisted ACME-DNS fields do not refresh the CNAME preview after immediate and deferred hydration")
+	}
+	for _, marker := range []string{"field.setValue(field.providerStoredValue || \"\");", "Ext.defer(function () {"} {
+		if !strings.Contains(block, marker) {
+			t.Fatalf("persisted ACME-DNS hydration is missing %q", marker)
+		}
+	}
+}
+
+func TestSynologyUIAcmeDNSPanelLaysOutInsertedChildren(t *testing.T) {
+	data, err := os.ReadFile("synology/spk/ui/DNSACME.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(data)
+	marker := "me.acmeDNSPanel.on(\"afterrender\", function (panel) {\n      panel.doLayout();\n    }, me, { single: true });"
+	if !strings.Contains(source, marker) {
+		t.Fatal("dynamically inserted ACME-DNS panel does not lay out its children after its own render")
+	}
+	if strings.Contains(source, "if (me.acmeDNSPanel) { me.acmeDNSPanel.doLayout(); }") {
+		t.Fatal("ACME-DNS child layout still depends on the parent form already being rendered")
+	}
+}
+
+func TestSynologyUIAcmeDNSCopyBindingAndReconfigureToken(t *testing.T) {
+	data, err := os.ReadFile("synology/spk/ui/DNSACME.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(data)
+	for _, marker := range []string{
+		`me.acmeDNSCNAMEBox.on("afterrender", function (box) {`,
+		`box.getEl().on("click", function (event) {`,
+		`SYNO.SDS.DNSACME.request("reconfigure", "POST", { editToken: me.configEditToken }`,
+	} {
+		if !strings.Contains(source, marker) {
+			t.Fatalf("ACME-DNS UI synchronization is missing %q", marker)
+		}
+	}
+	reconfigureStart := strings.Index(source, "  reconfigure: function () {")
+	reconfigureEnd := strings.Index(source[reconfigureStart:], "\n\n  enterReconfigureView:")
+	if reconfigureStart < 0 || reconfigureEnd < 0 {
+		t.Fatal("reconfigure block not found")
+	}
+	reconfigure := source[reconfigureStart : reconfigureStart+reconfigureEnd]
+	conflict := strings.Index(reconfigure, `if (String(data).indexOf("configuration changed") >= 0) {`)
+	reconcile := strings.Index(reconfigure, `SYNO.SDS.DNSACME.request("config", "GET", null`)
+	if conflict < 0 || reconcile < 0 || conflict > reconcile {
+		t.Fatal("reconfigure must handle edit-token conflict before HTTP-0 reconciliation")
+	}
+	for _, marker := range []string{
+		`me.reconfigBtn.setDisabled(false);`,
+		`me.setStatus(SYNO.SDS.DNSACME.t("status.configChanged"), true);`,
+		`return;`,
+	} {
+		if !strings.Contains(reconfigure[conflict:reconcile], marker) {
+			t.Fatalf("reconfigure conflict path is missing %q", marker)
+		}
+	}
+	renderStart := strings.Index(source, "  renderAcmeDNSCNAME: function () {")
+	renderEnd := strings.Index(source[renderStart:], "\n\n  copyAcmeDNSValue:")
+	if renderStart < 0 || renderEnd < 0 {
+		t.Fatal("renderAcmeDNSCNAME block not found")
+	}
+	if strings.Contains(source[renderStart:renderStart+renderEnd], `on("afterrender"`) {
+		t.Fatal("CNAME copy binding depends on CNAME content instead of component render")
+	}
+}
+
+func TestSynologyUIAcmeDNSHasNoRecoveryModesOrCloseAutosave(t *testing.T) {
+	data, err := os.ReadFile("synology/spk/ui/DNSACME.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(data)
+	for _, removed := range []string{
+		`me.save();`,
+		`acmeDNSMode`,
+		`_acmeDNSRecovery`,
+		`setAcmeDNSMode`,
+		`acmeDNSManual`,
+		`recoveryRequiresReload`,
+		`showAcmeDNSHandoff`,
+	} {
+		if strings.Contains(source, removed) {
+			t.Fatalf("removed ACME-DNS recovery behavior remains: %q", removed)
+		}
+	}
+}
+
+func TestSynologyUIUsesEditTokensAndPreservesStaleFormFields(t *testing.T) {
+	data, err := os.ReadFile("synology/spk/ui/DNSACME.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(data)
+	for _, marker := range []string{
+		`editToken: me.configEditToken,`,
+		`request(action, "POST", { editToken: me.configEditToken }`,
+		`me.configEditToken = data.editToken;`,
+		`me.configEditToken = reloadData.editToken;`,
+		`data.editToken !== undefined`,
+	} {
+		if !strings.Contains(source, marker) {
+			t.Fatalf("edit token transport is missing %q", marker)
+		}
+	}
+	if strings.Contains(source, "configRevision") || strings.Contains(source, "revision:") {
+		t.Fatal("abandoned revision transport remains in the UI")
+	}
+	start := strings.Index(source, "  save: function (cb, scope, opts) {")
+	end := strings.Index(source[start:], "\n\n  requestAction:")
+	if start < 0 || end < 0 {
+		t.Fatal("save block not found")
+	}
+	block := source[start : start+end]
+	failureEnd := strings.Index(block, "      me.markStepClean(me.step);")
+	if failureEnd < 0 {
+		t.Fatal("save failure branch end not found")
+	}
+	if strings.Contains(block[:failureEnd], "me.applyConfig(") || strings.Contains(block[:failureEnd], `request("config", "GET"`) {
+		t.Fatal("failed save refreshes the form and can discard a newly registered account")
 	}
 }
 

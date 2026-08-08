@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -85,6 +86,40 @@ func TestNewACMEIssuerSelectsCAAndEAB(t *testing.T) {
 	}
 	if issuer.ExternalAccount != nil {
 		t.Fatalf("expected no external account: %#v", issuer.ExternalAccount)
+	}
+}
+
+func TestNewACMEIssuerScopesResolversToAcmeDNS(t *testing.T) {
+	logger := newACMELogger()
+	magic := newCertMagicConfig(&Config{KeyType: "p384", StorageDir: t.TempDir()}, logger)
+	resolvers := []string{"1.1.1.1", "[2001:4860:4860::8888]:53"}
+
+	issuer := newACMEIssuer(&Config{
+		DNSProvider:  provider.AcmeDNS,
+		DNSResolvers: resolvers,
+	}, magic, fakeDNSProvider{}, logger)
+	solver, ok := issuer.DNS01Solver.(*certmagic.DNS01Solver)
+	if !ok {
+		t.Fatalf("DNS01 solver = %T, want *certmagic.DNS01Solver", issuer.DNS01Solver)
+	}
+	if got := solver.DNSManager.Resolvers; !reflect.DeepEqual(got, resolvers) {
+		t.Fatalf("ACME-DNS resolvers = %#v, want %#v", got, resolvers)
+	}
+	resolvers[0] = "changed"
+	if solver.DNSManager.Resolvers[0] != "1.1.1.1" {
+		t.Fatal("issuer retained the caller's resolver slice")
+	}
+
+	issuer = newACMEIssuer(&Config{
+		DNSProvider:  provider.Cloudflare,
+		DNSResolvers: []string{"1.1.1.1"},
+	}, magic, fakeDNSProvider{}, logger)
+	solver, ok = issuer.DNS01Solver.(*certmagic.DNS01Solver)
+	if !ok {
+		t.Fatalf("DNS01 solver = %T, want *certmagic.DNS01Solver", issuer.DNS01Solver)
+	}
+	if len(solver.DNSManager.Resolvers) != 0 {
+		t.Fatalf("non-ACME-DNS issuer received resolvers: %#v", solver.DNSManager.Resolvers)
 	}
 }
 

@@ -1,7 +1,7 @@
 Ext.ns("SYNO.SDS.DNSACME");
 
 // Source/package cache marker used to confirm that DSM loaded the rebuilt UI.
-SYNO.SDS.DNSACME.BUILD = 93;
+SYNO.SDS.DNSACME.BUILD = 117;
 
 // DSM's protected package-app route is the CGI trust boundary; this same-origin
 // URL does not implement separate browser authentication.
@@ -22,6 +22,8 @@ SYNO.SDS.DNSACME.I18N = {
     "button.testRun": "Test Run",
     "button.apply": "Apply",
     "button.reconfigure": "Reconfigure",
+    "button.registerAcmeDNS": "Register account",
+    "button.copy": "Copy",
     "button.ok": "OK",
     "status.saveBeforeForward": "Save the current step with Next before continuing",
     "status.fixFields": "Correct the highlighted fields",
@@ -64,7 +66,10 @@ SYNO.SDS.DNSACME.I18N = {
     "status.loadFailed": "Load failed: {error}",
     "status.saving": "Saving...",
     "status.saveFailed": "Save failed: {error}",
+    "status.configChanged": "Configuration changed in another browser. Your fields were not saved; copy any new credentials, then reload.",
     "status.saved": "Saved",
+    "status.registeringAcmeDNS": "Registering an ACME-DNS account...",
+    "status.acmeDNSRegistered": "ACME-DNS account registered. It will not be saved until you click Next.",
     "status.requestingStaging": "Requesting a staging certificate...",
     "status.requestingProduction": "Requesting a production certificate...",
     "status.stagingComplete": "Staging validation completed; wait at least 10 minutes before Apply",
@@ -90,7 +95,22 @@ SYNO.SDS.DNSACME.I18N = {
     "error.applyGeneric": "The certificate could not be applied. Check the log for details.",
     "error.requestFailed": "Request failed",
     "error.invalidResponse": "Invalid response",
-    "error.http": "HTTP {status}"
+    "error.http": "HTTP {status}",
+    "field.acmeDNSUsername": "Username",
+    "field.acmeDNSPassword": "Password",
+    "field.acmeDNSSubdomain": "Subdomain",
+    "field.acmeDNSFullDomain": "Full Domain",
+    "field.acmeDNSServer": "Server URL",
+    "field.acmeDNSResolvers": "Recursive DNS",
+    "placeholder.acmeDNSSubdomain": "Returned subdomain, e.g. 8c72f60d",
+    "placeholder.acmeDNSFullDomain": "e.g. 8c72f60d.auth.acme-dns.io",
+    "placeholder.acmeDNSResolvers": "1.1.1.1, 8.8.8.8",
+    "hint.acmeDNSTrust": "This delegated server can satisfy DNS challenges and request certificates for this domain. Only continue if you trust it.",
+    "dialog.acmeDNSTrustTitle": "Trust this ACME-DNS server?",
+    "dialog.acmeDNSTrustBody": "A new account will be created at {server}. This delegated server can satisfy DNS challenges and request certificates for this domain. Its one-time password is not saved until you click Next. Continue only if you trust this server.",
+    "hint.acmeDNSCNAME": "Create this CNAME record at your DNS provider before requesting a certificate.",
+    "label.acmeDNSCNAMEFrom": "Name",
+    "label.acmeDNSCNAMETo": "Target",
   },
   "zh-CN": {
     "step.certificate": "证书",
@@ -103,6 +123,8 @@ SYNO.SDS.DNSACME.I18N = {
     "button.testRun": "测试运行",
     "button.apply": "应用",
     "button.reconfigure": "重新配置",
+    "button.registerAcmeDNS": "注册账户",
+    "button.copy": "复制",
     "button.ok": "确定",
     "status.saveBeforeForward": "请先点击'下一步'保存当前步骤",
     "status.fixFields": "请修正标红的字段",
@@ -145,7 +167,10 @@ SYNO.SDS.DNSACME.I18N = {
     "status.loadFailed": "加载失败: {error}",
     "status.saving": "正在保存...",
     "status.saveFailed": "保存失败: {error}",
+    "status.configChanged": "配置已在另一个浏览器中变更. 当前字段未保存; 请复制新凭据后重载.",
     "status.saved": "已保存",
+    "status.registeringAcmeDNS": "正在注册 ACME-DNS 账户...",
+    "status.acmeDNSRegistered": "ACME-DNS 账户已注册. 点击下一步前不会保存.",
     "status.requestingStaging": "正在申请测试证书...",
     "status.requestingProduction": "正在申请正式证书...",
     "status.stagingComplete": "测试环境验证完成, 建议至少等待 10 分钟后再应用",
@@ -171,7 +196,22 @@ SYNO.SDS.DNSACME.I18N = {
     "error.applyGeneric": "证书应用失败, 请查看日志了解详情.",
     "error.requestFailed": "请求失败",
     "error.invalidResponse": "响应格式无效",
-    "error.http": "HTTP {status}"
+    "error.http": "HTTP {status}",
+    "field.acmeDNSUsername": "用户名",
+    "field.acmeDNSPassword": "密码",
+    "field.acmeDNSSubdomain": "子域标识",
+    "field.acmeDNSFullDomain": "完整域名",
+    "field.acmeDNSServer": "服务器 URL",
+    "field.acmeDNSResolvers": "递归 DNS",
+    "placeholder.acmeDNSSubdomain": "注册返回的 subdomain, 如 8c72f60d",
+    "placeholder.acmeDNSFullDomain": "如 8c72f60d.auth.acme-dns.io",
+    "placeholder.acmeDNSResolvers": "1.1.1.1, 8.8.8.8",
+    "hint.acmeDNSTrust": "此委派服务器可以为该域名完成 DNS 验证并请求证书. 仅在你信任该服务器时继续.",
+    "dialog.acmeDNSTrustTitle": "信任此 ACME-DNS 服务器?",
+    "dialog.acmeDNSTrustBody": "将在 {server} 创建新账户. 此委派服务器可以为该域名完成 DNS 验证并请求证书. 点击下一步前不会保存一次性密码. 仅在你信任该服务器时继续.",
+    "hint.acmeDNSCNAME": "在申请证书前, 请先在你的 DNS 提供商处创建此 CNAME 记录.",
+    "label.acmeDNSCNAMEFrom": "名称",
+    "label.acmeDNSCNAMETo": "目标",
   }
 };
 // I18N_CATALOG_END
@@ -192,6 +232,7 @@ SYNO.SDS.DNSACME.resolveLocale = function () {
 };
 
 SYNO.SDS.DNSACME.LOCALE = SYNO.SDS.DNSACME.resolveLocale();
+SYNO.SDS.DNSACME.FORM_LABEL_GAP = SYNO.SDS.DNSACME.LOCALE === "zh-CN" ? 3 : 8;
 
 // t performs named placeholder replacement while preserving the English catalog
 // as the fallback for missing keys and every unsupported DSM locale.
@@ -201,6 +242,14 @@ SYNO.SDS.DNSACME.t = function (key, values) {
   return text.replace(/\{([A-Za-z0-9_]+)\}/g, function (match, name) {
     return values && values[name] !== undefined ? String(values[name]) : match;
   });
+};
+
+SYNO.SDS.DNSACME.ACMEDNS_FIELD_TEXT = {
+  ACMEDNS_USERNAME: { label: "field.acmeDNSUsername" },
+  ACMEDNS_PASSWORD: { label: "field.acmeDNSPassword" },
+  ACMEDNS_SUBDOMAIN: { label: "field.acmeDNSSubdomain", placeholder: "placeholder.acmeDNSSubdomain" },
+  ACMEDNS_FULLDOMAIN: { label: "field.acmeDNSFullDomain", placeholder: "placeholder.acmeDNSFullDomain" },
+  ACMEDNS_SERVER_URL: { label: "field.acmeDNSServer" }
 };
 
 // One-time scoped CSS for the stepper, advanced section, log view, and footbar
@@ -227,10 +276,23 @@ SYNO.SDS.DNSACME.injectCss = function () {
     ".dnsacme-field-note { color:#8b95a1; font-size:12px; line-height:1.5; margin:2px 0 8px 0; max-width:560px; }",
     /* Amber marks a testing / caveat note; layout is inherited from -note. */
     ".dnsacme-field-warn { color:#c56a00; }",
+    ".dnsacme-acmedns { margin:2px 0 12px 160px; width:380px; max-width:380px; box-sizing:border-box; }",
+    ".dnsacme-acmedns-register-row .x-form-element { display:flex; align-items:center; }",
+    ".dnsacme-acmedns-register-row { margin-left:-8px; }",
+    ".dnsacme-acmedns-action { margin-left:8px; white-space:nowrap; }",
+    ".dnsacme-acmedns-cname { margin-top:8px; padding-top:10px; border-top:1px solid #d7e0ea; }",
+    ".dnsacme-acmedns-cname-row { display:flex; align-items:flex-start; gap:8px; margin-top:8px; color:#414b54; font-size:12px; line-height:1.45; }",
+    ".dnsacme-acmedns-cname-label { flex:0 0 44px; color:#6f7b86; }",
+    ".dnsacme-acmedns-cname code { flex:1 1 auto; min-width:0; padding:2px 4px; color:#2c333a; background:#edf2f7; word-break:break-all; font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }",
+    ".dnsacme-acmedns-copy-btn { flex:0 0 auto; min-width:48px; min-height:24px; padding:0 10px; border:0; border-radius:100px; background:#e6edf3; color:#0b5f9f; font-size:12px; line-height:24px; box-sizing:border-box; cursor:pointer; }",
+    ".dnsacme-acmedns-copy-btn:hover { background:#dce7f0; }",
+    ".dnsacme-acmedns-copy-btn:active { background:#d1e0ec; }",
+    ".dnsacme-acmedns-copy-btn:focus { outline:1px solid #057feb; outline-offset:1px; }",
     ".dnsacme-adv-toggle { display:flex; align-items:center; margin:20px 0 14px; color:#0b5f9f; font-weight:600; cursor:pointer; user-select:none; }",
     ".dnsacme-adv-toggle:after { content:''; height:1px; background:#86b3d4; flex:1; margin-left:14px; }",
     ".dnsacme-adv-arrow { display:inline-block; width:14px; margin-right:6px; color:#0b5f9f; }",
     ".dnsacme-adv-panel { padding-bottom:4px; }",
+    ".dnsacme-content-form .x-form-item-label { box-sizing:border-box; padding-right:" + SYNO.SDS.DNSACME.FORM_LABEL_GAP + "px !important; }",
     ".dnsacme-dns-form .x-form-item-label { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }",
     ".dnsacme-win .x-window-header.x-panel-icon { background-image:url(/webman/3rdparty/dnsacme/images/dnsacme_48.png) !important; background-repeat:no-repeat !important; background-position:18px 8px !important; background-size:24px 24px !important; }",
     ".dnsacme-error-dialog { width:auto; max-width:100%; padding:0; color:#414b54; box-sizing:border-box; }",
@@ -321,12 +383,22 @@ SYNO.SDS.DNSACME.request = function (action, method, data, cb, scope) {
         return;
       }
       if (!body || !body.success) {
-        cb.call(scope, false, (body && body.error) || SYNO.SDS.DNSACME.t("error.requestFailed"));
+        cb.call(scope, false, (body && body.error) || SYNO.SDS.DNSACME.t("error.requestFailed"), body && body.data);
         return;
       }
       cb.call(scope, true, body.data);
     },
     failure: function (response) {
+      var body;
+      try {
+        body = response.responseText ? Ext.decode(response.responseText) : null;
+      } catch (e) {
+        body = null;
+      }
+      if (body && !body.success) {
+        cb.call(scope, false, body.error || SYNO.SDS.DNSACME.t("error.requestFailed"), body.data);
+        return;
+      }
       cb.call(scope, false, SYNO.SDS.DNSACME.t("error.http", { status: response.status || 0 }));
     }
   });
@@ -355,9 +427,9 @@ Ext.define("com.synocommunity.packages.dnsacme", {
 Ext.define("SYNO.SDS.DNSACME.MainWindow", {
   extend: "SYNO.SDS.AppWindow",
   width: 1000,
-  height: 680,
+  height: 740,
   minWidth: 880,
-  minHeight: 560,
+  minHeight: 740,
   resizable: true,
   maximizable: true,
 
@@ -371,6 +443,10 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
   // on the right, reading as left-heavy; a snug column centers cleanly. The log
   // step keeps COLUMN_CONTENT so its output has room.
   COLUMN_FORM: 580,
+  // The right-aligned 160px label area makes the visible inputs carry more
+  // visual weight on the right even though the full form column is centered.
+  // Shift only the roomy desktop layout left; narrow layouts keep equal gutters.
+  FORM_COLUMN_OFFSET: 20,
   // Minimum gutter between the column and the card region edge, matching the
   // horizontal half of the card bodyStyle padding.
   COLUMN_GUTTER: 24,
@@ -380,6 +456,8 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
     me.providers = [];
     me.cfg = null;
     me.providerFields = [];
+    me.providerDrafts = {};
+    me.renderedProviderName = null;
     me._closed = false;
 
     SYNO.SDS.DNSACME.injectCss();
@@ -401,10 +479,7 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
 
     this.callParent([windowConfig]);
 
-    // Persist a dirty step on close as a best effort; callbacks ignore the
-    // destroyed window while the CGI request can still complete independently.
     this.on("beforedestroy", function () {
-      if (me.isCurrentStepDirty()) { me.save(); } // persist current-step edits
       me._closed = true;
       me.stopLogs();
       if (me.mainPanel && me.mainPanel.el) { me.mainPanel.el.unmask(); }
@@ -621,15 +696,21 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
     var me = this;
     me.setStatus(SYNO.SDS.DNSACME.t("status.openingConfiguration"));
     me.reconfigBtn.setDisabled(true);
-    SYNO.SDS.DNSACME.request("reconfigure", "POST", {}, function (ok, data) {
+    SYNO.SDS.DNSACME.request("reconfigure", "POST", { editToken: me.configEditToken }, function (ok, data) {
       if (me._closed) { return; }
       if (!ok) {
+        if (String(data).indexOf("configuration changed") >= 0) {
+          me.reconfigBtn.setDisabled(false);
+          me.setStatus(SYNO.SDS.DNSACME.t("status.configChanged"), true);
+          return;
+        }
         // DSM can report HTTP 0 after a CGI mutation has already committed.
         // Re-read authoritative state before presenting a transport failure.
         SYNO.SDS.DNSACME.request("config", "GET", null, function (reloadOk, reloadData) {
           if (me._closed) { return; }
           me.reconfigBtn.setDisabled(false);
           if (reloadOk && reloadData.config && reloadData.config.reconfiguring) {
+            me.configEditToken = reloadData.editToken;
             me.enterReconfigureView(reloadData.config);
             return;
           }
@@ -638,6 +719,7 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
         return;
       }
       me.reconfigBtn.setDisabled(false);
+      me.configEditToken = data.editToken;
       me.enterReconfigureView(data.config);
     }, me);
   },
@@ -726,6 +808,10 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
       // gap to the input is constant regardless of a label's character count
       // (left alignment left 2-char and 4-char labels with ragged gaps).
       labelAlign: cfg.labelAlign || "right",
+      // DSM localizes ExtJS's default separator. Keep form punctuation and the
+      // input gap identical in every UI locale.
+      labelSeparator: ":",
+      labelPad: 8,
       cls: cfg.cls || "",
       bodyStyle: "background:transparent;",
       defaults: Ext.apply({ msgTarget: "side" }, cfg.defaults || {}),
@@ -838,14 +924,20 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
     // The stepper centers via flex and can take the half pixel, so the two
     // columns differ by at most 1px at odd widths and agree everywhere else.
     var gutter = Math.max(me.COLUMN_GUTTER, Math.ceil((avail - max) / 2));
+    var offset = panel.dnsacmeColumn === me.COLUMN_FORM
+      ? Math.min(me.FORM_COLUMN_OFFSET, Math.max(0, gutter - me.COLUMN_GUTTER))
+      : 0;
+    var leftGutter = gutter - offset;
+    var rightGutter = gutter + offset;
     // "resize" fires continuously while the window is dragged and the work
     // below is a forced relayout of the card subtree, so skip the passes that
     // would rewrite the same padding. Every caller that needs a relayout for
     // another reason already runs its own doLayout, so nothing depends on this
     // call as a side effect.
-    if (panel.dnsacmeGutter === gutter) { return; }
-    panel.dnsacmeGutter = gutter;
-    panel.body.setStyle({ paddingLeft: gutter + "px", paddingRight: gutter + "px" });
+    var paddingKey = leftGutter + ":" + rightGutter;
+    if (panel.dnsacmePaddingKey === paddingKey) { return; }
+    panel.dnsacmePaddingKey = paddingKey;
+    panel.body.setStyle({ paddingLeft: leftGutter + "px", paddingRight: rightGutter + "px" });
     panel.syncSize();
     panel.doLayout(false, true);
   },
@@ -1079,15 +1171,42 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
   renderProviderFields: function () {
     var me = this;
     var target = me.pDns.dnsacmeInner || me.pDns;
-    Ext.each(me.providerFields, function (f) { target.remove(f, true); });
+    if (!me._skipProviderDraftCapture) { me.captureProviderDraft(); }
+    var fieldsToClear = me.providerFields.slice(0);
+    if (me.fAcmeDNSResolvers) { fieldsToClear.push(me.fAcmeDNSResolvers); }
+    if (me.acmeDNSRegisterRow) { fieldsToClear.push(me.acmeDNSRegisterRow); }
+    Ext.each(fieldsToClear, function (field) {
+      if (field && !field.destroyed && field.clearInvalid) { field.clearInvalid(); }
+    });
+    if (me.acmeDNSRegisterRow) { target.remove(me.acmeDNSRegisterRow, true); }
+    Ext.each(me.providerFields, function (f) {
+      if (f !== me.fAcmeDNSServer) { target.remove(f, true); }
+    });
+    if (me.acmeDNSPanel) { target.remove(me.acmeDNSPanel, true); }
+    if (me.fAcmeDNSResolvers) { target.remove(me.fAcmeDNSResolvers, true); }
     me.providerFields = [];
+    me.acmeDNSPanel = null;
+    me.acmeDNSCNAMEBox = null;
+    me.fAcmeDNSServer = null;
+    me.fAcmeDNSResolvers = null;
+    me.acmeDNSRegisterBtn = null;
+    me.acmeDNSRegisterRow = null;
     var prov = me.currentProvider();
     if (prov) {
+      var draft = me.providerDrafts[prov.name];
       Ext.each(prov.fields, function (f) {
-        var stored = (me.cfg && me.cfg.dns && me.cfg.dns.config && me.cfg.dns.config[f.key]) || "";
+        var hasDraft = draft && draft.config && Object.prototype.hasOwnProperty.call(draft.config, f.key);
+        var configuredProvider = me.cfg && me.cfg.dns && me.cfg.dns.provider;
+        var stored = hasDraft
+          ? draft.config[f.key]
+          : (configuredProvider === prov.name && me.cfg.dns.config && me.cfg.dns.config[f.key]) || "";
+        var fieldText = prov.name === "acmedns" ? SYNO.SDS.DNSACME.ACMEDNS_FIELD_TEXT[f.key] : null;
+        var fieldLabel = fieldText ? SYNO.SDS.DNSACME.t(fieldText.label) : (f.label || f.key);
+        var placeholder = fieldText && fieldText.placeholder ? SYNO.SDS.DNSACME.t(fieldText.placeholder) : (f.placeholder || "");
         var opts = {
-          fieldLabel: (f.label || f.key) + (f.required ? " *" : ""),
-          width: 380, emptyText: f.placeholder || "", value: stored, allowBlank: !f.required,
+          fieldLabel: fieldLabel + (f.required ? "*" : ""),
+          width: 380, emptyText: placeholder, value: stored, allowBlank: !f.required,
+          msgTarget: "qtip",
           labelStyle: "white-space:nowrap;"
         };
         if (f.secret) { opts.inputType = "password"; }
@@ -1101,8 +1220,17 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
         }, me, { single: true });
         me.providerFields.push(field);
         target.add(field);
+        // Container defaults are applied during add() and overwrite msgTarget
+        // even when the TextField constructor received "qtip". Restore it only
+        // after ownership is final so invalid dynamic fields never create a
+        // side icon whose layout listener can outlive provider switching.
+        me.useTooltipValidation(field);
       });
+      if (prov.name === "acmedns") {
+        me.buildAcmeDNSPanel(target);
+      }
     }
+    me.renderedProviderName = prov ? prov.name : null;
     if (me.pDns.rendered) {
       target.doLayout();
       me.pDns.doLayout();
@@ -1110,6 +1238,11 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
         field.setValue(field.providerStoredValue || "");
         field.validate();
       });
+      if (me.fAcmeDNSResolvers) {
+        me.fAcmeDNSResolvers.setValue(me.fAcmeDNSResolvers.dnsacmeStoredValue);
+        me.fAcmeDNSResolvers.validate();
+      }
+      me.renderAcmeDNSCNAME();
       // Synology's wrapped TextField can overwrite a value during the layout
       // pass that creates its input element. Reapply once after that pass so
       // redacted and non-secret persisted provider values remain visible.
@@ -1120,8 +1253,225 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
             field.validate();
           }
         });
+        if (me.fAcmeDNSResolvers && me.fAcmeDNSResolvers.rendered) {
+          me.fAcmeDNSResolvers.setValue(me.fAcmeDNSResolvers.dnsacmeStoredValue);
+          me.fAcmeDNSResolvers.validate();
+        }
+        me.renderAcmeDNSCNAME();
       }, 50, me);
     }
+  },
+
+  acmeDNSField: function (key) {
+    var result = null;
+    Ext.each(this.providerFields, function (field) { if (field.providerKey === key) { result = field; } });
+    return result;
+  },
+
+  captureProviderDraft: function () {
+    var me = this;
+    var providerName = me.renderedProviderName;
+    if (!providerName) { return; }
+    var draft = me.providerDrafts[providerName] || {};
+    var config = {};
+    Ext.each(me.providerFields, function (field) {
+      if (field && field.providerKey && field.getValue) {
+        config[field.providerKey] = field.getValue();
+      }
+    });
+    draft.config = config;
+    if (providerName === "acmedns" && me.fAcmeDNSResolvers && me.fAcmeDNSResolvers.getValue) {
+      draft.resolverText = me.fAcmeDNSResolvers.getValue();
+    }
+    me.providerDrafts[providerName] = draft;
+  },
+
+  mergeProviderDraftConfig: function (providerName, values) {
+    var draft = this.providerDrafts[providerName] || {};
+    draft.config = draft.config || {};
+    Ext.apply(draft.config, values || {});
+    this.providerDrafts[providerName] = draft;
+    return draft;
+  },
+
+  useTooltipValidation: function (field) {
+    if (field) { field.msgTarget = "qtip"; }
+  },
+
+  buildAcmeDNSPanel: function (target) {
+    var me = this;
+    me.fAcmeDNSServer = me.acmeDNSField("ACMEDNS_SERVER_URL");
+    if (!me.fAcmeDNSServer) { return; }
+    if (me.fAcmeDNSServer && !me.fAcmeDNSServer.getValue()) {
+      me.fAcmeDNSServer.setValue("https://auth.acme-dns.io");
+      me.fAcmeDNSServer.providerStoredValue = "https://auth.acme-dns.io";
+    }
+    me.acmeDNSRegisterBtn = new SYNO.ux.Button({
+      text: SYNO.SDS.DNSACME.t("button.registerAcmeDNS"),
+      cls: "dnsacme-acmedns-action",
+      disabled: !!me._acmeDNSRegistering,
+      handler: me.confirmAcmeDNSRegistration,
+      scope: me
+    });
+    var serverIndex = target.items.indexOf(me.fAcmeDNSServer);
+    target.remove(me.fAcmeDNSServer, false);
+    me.fAcmeDNSServer.hideLabel = true;
+    me.fAcmeDNSServer.width = 205;
+    me.acmeDNSRegisterRow = new Ext.form.CompositeField({
+      fieldLabel: SYNO.SDS.DNSACME.t("field.acmeDNSServer") + "*",
+      msgTarget: "qtip",
+      labelStyle: "white-space:nowrap;",
+      cls: "dnsacme-acmedns-register-row",
+      width: 380,
+      items: [me.fAcmeDNSServer, me.acmeDNSRegisterBtn]
+    });
+    var acmeDNSDraft = me.providerDrafts.acmedns;
+    var resolverValues = (me.cfg && me.cfg.dns && me.cfg.dns.resolvers) || [];
+    var resolverValue = acmeDNSDraft && acmeDNSDraft.resolverText !== undefined
+      ? acmeDNSDraft.resolverText
+      : (resolverValues.join(", ") || "1.1.1.1");
+    me.fAcmeDNSResolvers = new SYNO.ux.TextField({
+      fieldLabel: SYNO.SDS.DNSACME.t("field.acmeDNSResolvers") + "*",
+      width: 380,
+      emptyText: SYNO.SDS.DNSACME.t("placeholder.acmeDNSResolvers"),
+      value: resolverValue,
+      allowBlank: false,
+      msgTarget: "qtip",
+      labelStyle: "white-space:nowrap;"
+    });
+    me.fAcmeDNSResolvers.dnsacmeStoredValue = resolverValue;
+    me.liveValidateField(me.fAcmeDNSResolvers);
+    me.fAcmeDNSResolvers.on("afterrender", function (cmp) {
+      cmp.setValue(cmp.dnsacmeStoredValue);
+      cmp.validate();
+    }, me, { single: true });
+    me.acmeDNSPanel = new Ext.Panel({
+      border: false, width: 380, cls: "dnsacme-acmedns", bodyStyle: "background:transparent;padding:0;", layout: "form", hideLabel: true,
+      items: [
+        new Ext.BoxComponent({ autoEl: { tag: "div", cls: "dnsacme-field-note", html: Ext.util.Format.htmlEncode(SYNO.SDS.DNSACME.t("hint.acmeDNSTrust")) } }),
+        new Ext.BoxComponent({ autoEl: { tag: "div", cls: "dnsacme-acmedns-cname", html: "" } })
+      ]
+    });
+    me.acmeDNSCNAMEBox = me.acmeDNSPanel.items.itemAt(1);
+    me.acmeDNSPanel.on("afterrender", function (panel) {
+      panel.doLayout();
+    }, me, { single: true });
+    target.insert(serverIndex, me.acmeDNSRegisterRow);
+    target.insert(serverIndex + 1, me.fAcmeDNSResolvers);
+    target.insert(serverIndex + 2, me.acmeDNSPanel);
+    // The parent form applies its "side" default during insert(), including to
+    // the CompositeField and its child. Override after insertion, before the
+    // first layout can create an error icon.
+    me.useTooltipValidation(me.fAcmeDNSServer);
+    me.useTooltipValidation(me.acmeDNSRegisterRow);
+    me.useTooltipValidation(me.fAcmeDNSResolvers);
+    me.bindAcmeDNSCNAMEInput(me.fDomains);
+    var targetField = me.acmeDNSField("ACMEDNS_FULLDOMAIN");
+    me.bindAcmeDNSCNAMEInput(targetField);
+    me.acmeDNSCNAMEBox.on("afterrender", function (box) {
+      box.getEl().on("click", function (event) {
+        var button = event.getTarget("button.dnsacme-acmedns-copy-btn", box.getEl().dom);
+        if (button) { me.copyAcmeDNSValue(button.getAttribute("data-copy") || ""); }
+      });
+    }, me, { single: true });
+    me.renderAcmeDNSCNAME();
+  },
+
+  bindAcmeDNSCNAMEInput: function (field) {
+    var me = this;
+    if (!field || field.acmeDNSCNAMEListener) { return; }
+    field.acmeDNSCNAMEListener = true;
+    var refresh = function () { Ext.defer(me.renderAcmeDNSCNAME, 1, me); };
+    var bindDOM = function (cmp) {
+      cmp.getEl().on("input", refresh);
+      cmp.getEl().on("paste", refresh);
+      cmp.getEl().on("keyup", refresh);
+    };
+    field.on("change", refresh, me);
+    if (field.rendered) { bindDOM(field); }
+    else { field.on("afterrender", bindDOM, me, { single: true }); }
+  },
+
+  acmeDNSCNAME: function () {
+    var domain = Ext.util.Format.trim((this.fDomains && this.fDomains.getValue()) || "").replace(/^\*\./, "");
+    var targetField = this.acmeDNSField("ACMEDNS_FULLDOMAIN");
+    var target = Ext.util.Format.trim(targetField ? targetField.getValue() : "");
+    return { source: domain ? "_acme-challenge." + domain + "." : "", target: target ? target.replace(/\.$/, "") + "." : "" };
+  },
+
+  renderAcmeDNSCNAME: function () {
+    var me = this;
+    if (!me.acmeDNSCNAMEBox) { return; }
+    var cname = me.acmeDNSCNAME();
+    if (!cname.source || !cname.target) {
+      if (me.acmeDNSCNAMEBox.rendered) { me.acmeDNSCNAMEBox.getEl().update(""); }
+      else { me.acmeDNSCNAMEBox.autoEl.html = ""; }
+      return;
+    }
+    var encodedSource = Ext.util.Format.htmlEncode(cname.source || "-");
+    var encodedTarget = Ext.util.Format.htmlEncode(cname.target || "-");
+    var html = '<div><div class="dnsacme-field-note">' + Ext.util.Format.htmlEncode(SYNO.SDS.DNSACME.t("hint.acmeDNSCNAME")) + '</div>' +
+      '<div class="dnsacme-acmedns-cname-row"><span class="dnsacme-acmedns-cname-label">' + Ext.util.Format.htmlEncode(SYNO.SDS.DNSACME.t("label.acmeDNSCNAMEFrom")) + '</span><code>' + encodedSource + '</code><button type="button" class="dnsacme-acmedns-copy-btn" data-copy="' + encodedSource + '" aria-label="' + Ext.util.Format.htmlEncode(SYNO.SDS.DNSACME.t("button.copy")) + ' ' + encodedSource + '">' + Ext.util.Format.htmlEncode(SYNO.SDS.DNSACME.t("button.copy")) + '</button></div>' +
+      '<div class="dnsacme-acmedns-cname-row"><span class="dnsacme-acmedns-cname-label">' + Ext.util.Format.htmlEncode(SYNO.SDS.DNSACME.t("label.acmeDNSCNAMETo")) + '</span><code>' + encodedTarget + '</code><button type="button" class="dnsacme-acmedns-copy-btn" data-copy="' + encodedTarget + '" aria-label="' + Ext.util.Format.htmlEncode(SYNO.SDS.DNSACME.t("button.copy")) + ' ' + encodedTarget + '">' + Ext.util.Format.htmlEncode(SYNO.SDS.DNSACME.t("button.copy")) + '</button></div></div>';
+    if (me.acmeDNSCNAMEBox.rendered) {
+      me.acmeDNSCNAMEBox.getEl().update(html);
+    } else {
+      me.acmeDNSCNAMEBox.autoEl.html = html;
+    }
+  },
+
+  copyAcmeDNSValue: function (value) {
+    var input = document.createElement("textarea");
+    input.value = value;
+    input.setAttribute("readonly", "readonly");
+    input.style.position = "fixed";
+    input.style.opacity = "0";
+    document.body.appendChild(input);
+    input.select();
+    try { document.execCommand("copy"); } catch (ignore) {}
+    document.body.removeChild(input);
+  },
+
+  confirmAcmeDNSRegistration: function () {
+    var me = this;
+    var server = Ext.util.Format.trim((me.fAcmeDNSServer && me.fAcmeDNSServer.getValue()) || "https://auth.acme-dns.io");
+    var safeServer = Ext.util.Format.htmlEncode(server);
+    me.getMsgBox().show({
+      title: SYNO.SDS.DNSACME.t("dialog.acmeDNSTrustTitle"),
+      msg: SYNO.SDS.DNSACME.t("dialog.acmeDNSTrustBody", { server: safeServer }),
+      buttons: Ext.MessageBox.YESNO,
+      icon: Ext.MessageBox.WARNING,
+      minWidth: 420,
+      maxWidth: 560,
+      fn: function (button) {
+        if (button === "yes") { me.registerAcmeDNS(server); }
+      }
+    });
+  },
+
+  registerAcmeDNS: function (server) {
+    var me = this;
+    if (me._acmeDNSRegistering) { return; }
+    me._acmeDNSRegistering = true;
+    if (me.acmeDNSRegisterBtn) { me.acmeDNSRegisterBtn.setDisabled(true); }
+    me.setStatus(SYNO.SDS.DNSACME.t("status.registeringAcmeDNS"));
+    SYNO.SDS.DNSACME.request("acmedns-register", "POST", { serverURL: server }, function (ok, data) {
+      me._acmeDNSRegistering = false;
+      if (me._closed) { return; }
+      if (me.acmeDNSRegisterBtn) { me.acmeDNSRegisterBtn.setDisabled(false); }
+      if (!ok) { me.setStatus(SYNO.SDS.DNSACME.t("status.saveFailed", { error: data }), true); return; }
+      me.hydrateAcmeDNSAccount(data, data.serverURL || server);
+      me.renderAcmeDNSCNAME();
+      me.setStatus(SYNO.SDS.DNSACME.t("status.acmeDNSRegistered"));
+    }, me);
+  },
+
+  hydrateAcmeDNSAccount: function (account, server) {
+    var values = { ACMEDNS_USERNAME: account.username, ACMEDNS_PASSWORD: account.password, ACMEDNS_SUBDOMAIN: account.subdomain, ACMEDNS_FULLDOMAIN: account.fulldomain, ACMEDNS_SERVER_URL: server };
+    this.mergeProviderDraftConfig("acmedns", values);
+    Ext.each(this.providerFields, function (field) {
+      if (values[field.providerKey] !== undefined) { field.setValue(values[field.providerKey]); field.providerStoredValue = values[field.providerKey]; }
+    });
   },
 
   // Mask the whole panel while the very first config load is in flight, so the
@@ -1149,26 +1499,34 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
       SYNO.SDS.DNSACME.request("config", "GET", null, function (ok2, data2) {
         if (me._closed) { return; }
         if (!ok2) { me.unmaskMain(); me.setStatus(SYNO.SDS.DNSACME.t("status.loadFailed", { error: data2 })); return; }
-        me.applyConfig(data2.config, data2.testPassed, data2.canRenew, data2.persisted, data2.detected);
+        me.applyConfig(data2.config, data2.testPassed, data2.canRenew, data2.persisted, data2.detected, data2.editToken);
         me.unmaskMain();
         me.setStatus(opts.status || SYNO.SDS.DNSACME.t("status.ready"), opts.error);
       }, me);
     }, me);
   },
 
-  applyConfig: function (cfg, testPassed, canRenew, persisted, detected) {
+  applyConfig: function (cfg, testPassed, canRenew, persisted, detected, editToken) {
     var me = this;
     me.setActionsBusy(false);
     // cfg is already redacted by the CGI. Mask sentinels are intentionally kept
     // in the controls; mergeSecrets restores their persisted values on save.
     me.cfg = cfg;
+    me.configEditToken = editToken;
     me.forceWizard = !!cfg.reconfiguring;
     me.fDomains.setValue((cfg.acme.domains || []).join("\n"));
     me.fEmail.setValue(cfg.acme.email || "");
     me.fKeyType.setValue(cfg.acme.keyType || "rsa4096");
     me.fCa.setValue(cfg.acme.ca || "letsencrypt");
-    me.fProvider.setValue(cfg.dns.provider || (me.providers[0] && me.providers[0].name));
-    me.renderProviderFields();
+    me.providerDrafts = {};
+    me.renderedProviderName = null;
+    me._skipProviderDraftCapture = true;
+    try {
+      me.fProvider.setValue(cfg.dns.provider || (me.providers[0] && me.providers[0].name));
+      me.renderProviderFields();
+    } finally {
+      me._skipProviderDraftCapture = false;
+    }
 
     var scheme = cfg.synology.scheme || "https";
     var host = cfg.synology.host || "127.0.0.1";
@@ -1210,16 +1568,28 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
 
   collectConfig: function () {
     var me = this;
-    var dnsConfig = {};
-    Ext.each(me.providerFields, function (f) { dnsConfig[f.providerKey] = f.getValue(); });
+    me.captureProviderDraft();
+    var selectedProvider = me.fProvider.getValue();
+    var selectedDraft = me.providerDrafts[selectedProvider] || { config: {} };
+    var dnsConfig = Ext.apply({}, selectedDraft.config || {});
     var domains = [];
     Ext.each((me.fDomains.getValue() || "").split(/\r?\n|,/), function (d) {
       d = Ext.util.Format.trim(d);
       if (d) { domains.push(d); }
     });
+    var resolvers = [];
+    if (selectedProvider === "acmedns") {
+      Ext.each((selectedDraft.resolverText || "").split(","), function (resolver) {
+        resolver = Ext.util.Format.trim(resolver);
+        if (resolver) { resolvers.push(resolver); }
+      });
+    } else {
+      resolvers = (me.cfg && me.cfg.dns && me.cfg.dns.resolvers) || ["1.1.1.1"];
+    }
     return {
+      editToken: me.configEditToken,
       acme: { domains: domains, email: Ext.util.Format.trim(me.fEmail.getValue()), keyType: me.fKeyType.getValue(), ca: me.fCa.getValue() },
-      dns: { provider: me.fProvider.getValue(), config: dnsConfig },
+      dns: { provider: selectedProvider, config: dnsConfig, resolvers: resolvers },
       synology: {
         scheme: me.fScheme.getValue(), host: Ext.util.Format.trim(me.fHost.getValue()) || "127.0.0.1",
         port: Number(me.fPort.getValue()), account: Ext.util.Format.trim(me.fAccount.getValue()),
@@ -1239,7 +1609,11 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
     SYNO.SDS.DNSACME.request("config", "POST", me.collectConfig(), function (ok, data) {
       if (me._closed) { return; }
       if (!ok) {
-        me.setStatus(SYNO.SDS.DNSACME.t("status.saveFailed", { error: data }));
+        if (String(data).indexOf("configuration changed") >= 0) {
+          me.setStatus(SYNO.SDS.DNSACME.t("status.configChanged"), true);
+        } else {
+          me.setStatus(SYNO.SDS.DNSACME.t("status.saveFailed", { error: data }), true);
+        }
         if (opts.onFail) { opts.onFail(); }
         return;
       }
@@ -1249,9 +1623,10 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
         // Avoid a full applyConfig call because rebuilding dynamic fields would
         // disturb focus and dirty tracking before the next card is shown.
         me.cfg = data.config;
+        me.configEditToken = data.editToken;
         me._testPassed = !!data.testPassed;
       } else {
-        me.applyConfig(data.config, data.testPassed, data.canRenew, data.persisted, data.detected);
+        me.applyConfig(data.config, data.testPassed, data.canRenew, data.persisted, data.detected, data.editToken);
       }
       me.setStatus(SYNO.SDS.DNSACME.t("status.saved"));
       if (cb) { cb.call(scope || me); }
@@ -1308,16 +1683,18 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
     me.setActionsBusy(true);
     me.save(function () {
       if (me._closed) { return; }
+      var operationBaseline = me.operationStateFingerprint(action, me.cfg);
       var requesting = action === "test-run"
         ? SYNO.SDS.DNSACME.t("status.requestingStaging")
         : SYNO.SDS.DNSACME.t("status.requestingProduction");
       me.setStatus(requesting);
       me.mainPanel.el.mask(requesting, "x-mask-loading");
-      SYNO.SDS.DNSACME.request(action, "POST", {}, function (ok, data) {
+      SYNO.SDS.DNSACME.request(action, "POST", { editToken: me.configEditToken }, function (ok, data, failureData) {
         if (me._closed) { return; }
         me.mainPanel.el.unmask();
         if (!ok) {
-          me.reconcileActionState(action, data);
+          if (failureData) { me.settleActionFailure(action, failureData, data); }
+          else { me.reconcileActionState(action, data, operationBaseline); }
           return;
         }
         if (action === "apply") { me.forceWizard = false; }
@@ -1349,6 +1726,7 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
       me.setActionsBusy(false);
       me._testPassed = true;
       if (data && data.config) {
+        if (data.editToken !== undefined) { me.configEditToken = data.editToken; }
         if (data.config.acme) { me.cfg = data.config; }
         else if (data.config.lastTest) { me.cfg.lastTest = data.config.lastTest; }
       }
@@ -1361,19 +1739,33 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
       me.setStatus(SYNO.SDS.DNSACME.t("status.loadFailed", { error: SYNO.SDS.DNSACME.t("error.invalidResponse") }), true);
       return;
     }
+    if (data.editToken !== undefined) { me.configEditToken = data.editToken; }
     me.cfg = data.config;
     me.enterDeployedView(data.config);
     me.loadLogs();
   },
 
-  reconcileActionState: function (action, errorText) {
+  operationState: function (action, source) {
+    source = source || {};
+    var config = source.config || source;
+    return action === "test-run" ? (config.lastTest || {}) : (config.lastApply || {});
+  },
+
+  operationStateFingerprint: function (action, source) {
+    var operation = this.operationState(action, source);
+    return [operation.success ? "1" : "0", String(operation.at || ""), String(operation.message || "")].join("\n");
+  },
+
+  reconcileActionState: function (action, errorText, operationBaseline) {
     var me = this;
     // DSM may surface a long-running CGI completion as HTTP 0 even though the Go
     // process finished. Treat persisted operation state as authoritative before
     // displaying a failure, then use the log tail for the actionable reason.
     SYNO.SDS.DNSACME.request("status", "GET", null, function (ok, data) {
       if (me._closed) { return; }
-      var completed = ok && (
+      var currentOperation = ok ? me.operationState(action, data) : {};
+      var operationChanged = ok && me.operationStateFingerprint(action, data) !== operationBaseline;
+      var completed = operationChanged && currentOperation.success && (
         (action === "test-run" && data.testPassed) ||
         (action === "apply" && data.canRenew)
       );
@@ -1382,17 +1774,31 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
         me.setStatus(action === "test-run"
           ? SYNO.SDS.DNSACME.t("status.stagingComplete")
           : SYNO.SDS.DNSACME.t("status.productionApplied"));
-        me.finishAction(action, action === "test-run" ? { config: { lastTest: data.lastTest } } : data);
+        me.finishAction(action, action === "test-run" ? { config: { lastTest: data.lastTest }, editToken: data.editToken } : data);
         return;
       }
-      SYNO.SDS.DNSACME.request("logs", "GET", null, function (logsOk, logsData) {
-        var reason = me.lastFailureLine((logsOk && logsData && logsData.logs) || "", errorText);
-        var status = action === "test-run" ? SYNO.SDS.DNSACME.t("dialog.testFailed") : SYNO.SDS.DNSACME.t("dialog.applyFailed");
-        me.loadAll({ status: status, error: true });
-        me.loadLogs();
-        me.showActionFailure(action, reason);
-      }, me);
+      if (operationChanged) {
+        me.settleActionFailure(action, data, errorText);
+      } else {
+        me.settleActionFailure(action, null, ok ? errorText : data);
+      }
     }, me);
+  },
+
+  settleActionFailure: function (action, data, fallback) {
+    var me = this;
+    var config = data && data.config;
+    var operation = action === "test-run"
+      ? ((config && config.lastTest) || (data && data.lastTest))
+      : ((config && config.lastApply) || (data && data.lastApply));
+    var reason = (operation && operation.message) || fallback;
+    me.setActionsBusy(false);
+    if (data && data.editToken !== undefined) { me.configEditToken = data.editToken; }
+    if (config && config.acme) { me.cfg = config; }
+    if (action === "test-run") { me._testPassed = false; }
+    me.setStatus(SYNO.SDS.DNSACME.t("status.failed", { reason: me.friendlyFailureMessage(action, reason) }), true);
+    me.loadLogs();
+    me.showActionFailure(action, reason);
   },
 
   showActionFailure: function (action, reason) {

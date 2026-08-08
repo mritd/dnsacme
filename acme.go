@@ -198,6 +198,10 @@ func newCertMagicConfig(conf *Config, logger *zap.Logger) *certmagic.Config {
 }
 
 func newACMEIssuer(conf *Config, magic *certmagic.Config, dnsProvider certmagic.DNSProvider, logger *zap.Logger) *certmagic.ACMEIssuer {
+	var resolvers []string
+	if strings.EqualFold(conf.DNSProvider, provider.AcmeDNS) {
+		resolvers = append([]string(nil), conf.DNSResolvers...)
+	}
 	issuer := certmagic.NewACMEIssuer(magic, certmagic.ACMEIssuer{
 		Agreed:                  true,
 		DisableHTTPChallenge:    true,
@@ -206,6 +210,7 @@ func newACMEIssuer(conf *Config, magic *certmagic.Config, dnsProvider certmagic.
 		DNS01Solver: &certmagic.DNS01Solver{
 			DNSManager: certmagic.DNSManager{
 				DNSProvider: dnsProvider,
+				Resolvers:   resolvers,
 			},
 		},
 		Logger: logger,

@@ -72,6 +72,12 @@ dnsacme 也提供适用于 Synology DSM 7.0 及更高版本的原生套件. 套�
 - 生产证书和 staging 证书使用独立的存储目录.
 - 套件升级时始终保留配置, 证书存储和日志. 卸载向导也会默认保留这些数据, 只有用户明确选择删除选项时才会清理.
 
+在向导中配置 ACME-DNS 时, 可以手动填写已有账户, 也可以点击 **注册账户** 并确认服务器. 注册只会回填表单, 点击 **下一步** 后才会保存凭据. 如果在此之前关闭向导, 这些凭据会被丢弃. 账户信息填写完整后, 请在权威 DNS 服务商处创建界面显示的 CNAME, 将 `_acme-challenge` 名称指向 ACME-DNS 完整域名. DNSACME 不会代为创建这条记录.
+
+**递归 DNS** 字段支持填写一个或多个解析器地址, 多个地址之间使用英文逗号分隔, 默认值为 `1.1.1.1`. DNSACME 会通过这些解析器检查 ACME-DNS 记录是否已经生效.
+
+将 `_acme-challenge` 名称委派给 ACME-DNS 后, 该服务可以为对应域名完成 DNS-01 验证. 使用公共服务前, 请先了解其服务条款和安全状况. 如果不能接受这一信任边界, 请自行部署 ACME-DNS 服务.
+
 构建套件, 每种架构会生成一个 SPK 文件:
 
 ```sh
@@ -189,10 +195,11 @@ go build -tags synology
 
 ### DNS 配置
 
-dnsacme 当前支持 9 个 DNS 服务商. 理论上还可以支持更多服务商, 部分服务商尚未添加. `--dns` 参数支持的服务商定义在 [internal/provider/provider.go](https://github.com/mritd/dnsacme/blob/main/internal/provider/provider.go) 中:
+DNSACME 通过 `--dns` 参数支持多个 DNS 服务商. 具体支持范围以 [internal/provider/provider.go](https://github.com/mritd/dnsacme/blob/main/internal/provider/provider.go) 中的定义为准:
 
 ```go
 const (
+    AcmeDNS       = "acmedns"
     AliDNS        = "alidns"
     Azure         = "azure"
     Cloudflare    = "cloudflare"
@@ -215,6 +222,11 @@ dnsacme --dns alidns --dns-config=ALIDNS_ACCKEYID=xxxxxx --dns-config=ALIDNS_ACC
 
 ```go
 const (
+    AcmeDNSUsername             = "ACMEDNS_USERNAME"
+    AcmeDNSPassword             = "ACMEDNS_PASSWORD"
+    AcmeDNSSubdomain            = "ACMEDNS_SUBDOMAIN"
+    AcmeDNSFullDomain           = "ACMEDNS_FULLDOMAIN"
+    AcmeDNSServerURL            = "ACMEDNS_SERVER_URL"
     AliDNSAccessKeyID           = "ALIDNS_ACCKEYID"
     AliDNSAccessKeySecret       = "ALIDNS_ACCKEYSECRET"
     AliDNSRegionID              = "ALIDNS_REGIONID"
@@ -237,7 +249,9 @@ const (
 )
 ```
 
-目前并未实际使用所有 DNS 服务商, 因此部分服务商的配置没有经过验证. 如果遗漏必填参数, CertMagic 会返回对应错误.
+使用 `--dns acmedns` 时, 必须提供 `ACMEDNS_USERNAME`, `ACMEDNS_PASSWORD`, `ACMEDNS_SUBDOMAIN` 和 `ACMEDNS_SERVER_URL`. CLI 申请证书时可以省略 `ACMEDNS_FULLDOMAIN`, 但 Synology 向导也会要求填写它, 以便重新打开向导后继续显示 CNAME 委派目标.
+
+维护者尚未测试所有 DNS 服务商的配置. 如果缺少必填项或配置值无效, CertMagic 会返回相应错误.
 
 ### 钩子命令
 

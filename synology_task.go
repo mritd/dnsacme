@@ -17,68 +17,104 @@ import (
 	"time"
 
 	"github.com/caddyserver/certmagic"
+	"github.com/mritd/dnsacme/internal/provider"
 	"github.com/sirupsen/logrus"
 )
 
 type synologyTaskResult struct {
-	Config SynologyConfig `json:"config"`
-	State  string         `json:"state"`
+	Config    SynologyConfig `json:"config"`
+	EditToken string         `json:"editToken"`
+	State     string         `json:"state"`
 }
 
-func newSynologyTaskResult(cfg SynologyConfig, state string) synologyTaskResult {
+func newSynologyTaskResult(snapshot synologyConfigSnapshot, state string) synologyTaskResult {
 	// Task results cross the CGI boundary, so never return the persisted secrets.
-	return synologyTaskResult{Config: cfg.Redacted(), State: state}
+	return synologyTaskResult{Config: snapshot.Config.Redacted(), EditToken: snapshot.EditToken, State: state}
+}
+
+func recordSynologyTestState(configPath, startingHash, startingEditToken string, state SynologyOperationState) (synologyConfigSnapshot, bool, error) {
+	snapshot, updated, err := updateSynologyTaskState(configPath, startingHash, startingEditToken, func(cfg *SynologyConfig) {
+		cfg.LastTest = state
+	})
+	return snapshot, updated, err
+}
+
+func recordSynologyApplyState(configPath, startingHash, startingEditToken string, state SynologyOperationState, applied bool) (synologyConfigSnapshot, bool, error) {
+	snapshot, updated, err := updateSynologyTaskState(configPath, startingHash, startingEditToken, func(cfg *SynologyConfig) {
+		cfg.LastApply = state
+		if applied {
+			cfg.Reconfiguring = false
+		}
+	})
+	return snapshot, updated, err
 }
 
 // runSynologyTest verifies DSM authentication and obtains from staging storage.
 // It records success for the current config hash but never starts production
 // renewal or imports the staging certificate into DSM.
 func runSynologyTest(ctx context.Context, configPath string) (synologyTaskResult, error) {
-	cfg, err := loadSynologyConfig(configPath)
+	return runSynologyTestForEditToken(ctx, configPath, "")
+}
+
+func runSynologyTestForEditToken(ctx context.Context, configPath, expectedEditToken string) (synologyTaskResult, error) {
+	starting, err := loadSynologyConfigSnapshot(configPath)
 	if err != nil {
 		return synologyTaskResult{}, err
 	}
-	cfg = normalizeSynologyConfig(cfg)
+	if expectedEditToken != "" && starting.EditToken != expectedEditToken {
+		return newSynologyTaskResult(starting, "stale"), errSynologyConfigChanged
+	}
+	cfg := normalizeSynologyConfig(starting.Config)
+	startingHash := cfg.ConfigHash()
+	startingEditToken := starting.EditToken
 	configureSynologyLog(cfg)
 	if err := validateConfigForSynology(cfg, true); err != nil {
-		cfg.LastTest = SynologyOperationState{Success: false, At: time.Now(), ConfigHash: cfg.ConfigHash(), Message: err.Error()}
-		_ = saveSynologyConfig(configPath, cfg)
-		return newSynologyTaskResult(cfg, "failed"), err
+		if current, _, saveErr := recordSynologyTestState(configPath, startingHash, startingEditToken, SynologyOperationState{Success: false, At: time.Now(), ConfigHash: startingHash, Message: err.Error()}); saveErr == nil {
+			starting = current
+		}
+		return newSynologyTaskResult(starting, "failed"), err
 	}
 
 	appendSynologyLog(cfg, "checking DSM login")
 	if err := verifySynologyLogin(ctx, cfg.Synology); err != nil {
-		cfg.LastTest = SynologyOperationState{Success: false, At: time.Now(), ConfigHash: cfg.ConfigHash(), Message: "DSM login failed: " + err.Error()}
-		_ = saveSynologyConfig(configPath, cfg)
+		if current, _, saveErr := recordSynologyTestState(configPath, startingHash, startingEditToken, SynologyOperationState{Success: false, At: time.Now(), ConfigHash: startingHash, Message: "DSM login failed: " + err.Error()}); saveErr == nil {
+			starting = current
+		}
 		appendSynologyLog(cfg, "DSM login failed: "+err.Error())
-		return newSynologyTaskResult(cfg, "failed"), err
+		return newSynologyTaskResult(starting, "failed"), err
 	}
 	appendSynologyLog(cfg, "DSM login succeeded")
 
 	runtime, cleanup, err := freshSynologyStagingRuntime(cfg)
 	if err != nil {
-		cfg.LastTest = SynologyOperationState{Success: false, At: time.Now(), ConfigHash: cfg.ConfigHash(), Message: err.Error()}
-		_ = saveSynologyConfig(configPath, cfg)
+		if current, _, saveErr := recordSynologyTestState(configPath, startingHash, startingEditToken, SynologyOperationState{Success: false, At: time.Now(), ConfigHash: startingHash, Message: err.Error()}); saveErr == nil {
+			starting = current
+		}
 		appendSynologyLog(cfg, "staging ACME validation failed: "+err.Error())
-		return newSynologyTaskResult(cfg, "failed"), err
+		return newSynologyTaskResult(starting, "failed"), err
 	}
 	defer cleanup()
 
 	appendSynologyLog(cfg, "starting staging ACME validation")
 	err = ObtainOnce(ctx, &runtime, false)
 	if err != nil {
-		cfg.LastTest = SynologyOperationState{Success: false, At: time.Now(), ConfigHash: cfg.ConfigHash(), Message: err.Error()}
-		_ = saveSynologyConfig(configPath, cfg)
+		if current, _, saveErr := recordSynologyTestState(configPath, startingHash, startingEditToken, SynologyOperationState{Success: false, At: time.Now(), ConfigHash: startingHash, Message: err.Error()}); saveErr == nil {
+			starting = current
+		}
 		appendSynologyLog(cfg, "staging ACME validation failed: "+err.Error())
-		return newSynologyTaskResult(cfg, "failed"), err
+		return newSynologyTaskResult(starting, "failed"), err
 	}
 
-	cfg.LastTest = SynologyOperationState{Success: true, At: time.Now(), ConfigHash: cfg.ConfigHash(), Message: "staging ACME validation succeeded"}
-	if err := saveSynologyConfig(configPath, cfg); err != nil {
+	var updated bool
+	starting, updated, err = recordSynologyTestState(configPath, startingHash, startingEditToken, SynologyOperationState{Success: true, At: time.Now(), ConfigHash: startingHash, Message: "staging ACME validation succeeded"})
+	if err != nil {
 		return synologyTaskResult{}, err
 	}
+	if !updated {
+		return newSynologyTaskResult(starting, "stale"), errSynologyConfigChanged
+	}
 	appendSynologyLog(cfg, "staging ACME validation succeeded")
-	return newSynologyTaskResult(cfg, "ok"), nil
+	return newSynologyTaskResult(starting, "ok"), nil
 }
 
 // freshSynologyStagingRuntime gives every validation an empty CertMagic storage
@@ -105,46 +141,62 @@ func freshSynologyStagingRuntime(cfg SynologyConfig) (Config, func(), error) {
 // from the selected production CA, and imports the certificate into DSM. A prior
 // staging test is optional and never gates this path.
 func runSynologyApply(ctx context.Context, configPath string) (synologyTaskResult, error) {
-	cfg, err := loadSynologyConfig(configPath)
+	return runSynologyApplyForEditToken(ctx, configPath, "")
+}
+
+func runSynologyApplyForEditToken(ctx context.Context, configPath, expectedEditToken string) (synologyTaskResult, error) {
+	starting, err := loadSynologyConfigSnapshot(configPath)
 	if err != nil {
 		return synologyTaskResult{}, err
 	}
-	cfg = normalizeSynologyConfig(cfg)
+	if expectedEditToken != "" && starting.EditToken != expectedEditToken {
+		return newSynologyTaskResult(starting, "stale"), errSynologyConfigChanged
+	}
+	cfg := normalizeSynologyConfig(starting.Config)
+	startingHash := cfg.ConfigHash()
+	startingEditToken := starting.EditToken
 	configureSynologyLog(cfg)
 	if err := validateConfigForSynology(cfg, true); err != nil {
-		return newSynologyTaskResult(cfg, "failed"), err
+		if current, _, saveErr := recordSynologyApplyState(configPath, startingHash, startingEditToken, SynologyOperationState{Success: false, At: time.Now(), ConfigHash: startingHash, Message: err.Error()}, false); saveErr == nil {
+			starting = current
+		}
+		return newSynologyTaskResult(starting, "failed"), err
 	}
 	appendSynologyLog(cfg, "checking DSM login")
 	if err := verifySynologyLogin(ctx, cfg.Synology); err != nil {
-		cfg.LastApply = SynologyOperationState{Success: false, At: time.Now(), ConfigHash: cfg.ConfigHash(), Message: "DSM login failed: " + err.Error()}
-		_ = saveSynologyConfig(configPath, cfg)
+		if current, _, saveErr := recordSynologyApplyState(configPath, startingHash, startingEditToken, SynologyOperationState{Success: false, At: time.Now(), ConfigHash: startingHash, Message: "DSM login failed: " + err.Error()}, false); saveErr == nil {
+			starting = current
+		}
 		appendSynologyLog(cfg, "DSM login failed: "+err.Error())
-		return newSynologyTaskResult(cfg, "failed"), err
+		return newSynologyTaskResult(starting, "failed"), err
 	}
 	appendSynologyLog(cfg, "DSM login succeeded")
 
 	appendSynologyLog(cfg, "starting production ACME issuance")
 	runtime := cfg.RuntimeConfig(false)
 	if err := ObtainOnce(ctx, &runtime, false); err != nil {
-		cfg.LastApply = SynologyOperationState{Success: false, At: time.Now(), ConfigHash: cfg.ConfigHash(), Message: err.Error()}
-		_ = saveSynologyConfig(configPath, cfg)
+		if current, _, saveErr := recordSynologyApplyState(configPath, startingHash, startingEditToken, SynologyOperationState{Success: false, At: time.Now(), ConfigHash: startingHash, Message: err.Error()}, false); saveErr == nil {
+			starting = current
+		}
 		appendSynologyLog(cfg, "production ACME issuance failed: "+err.Error())
-		return newSynologyTaskResult(cfg, "failed"), err
+		return newSynologyTaskResult(starting, "failed"), err
 	}
 
 	keyPath, certPath, err := findStoredCertificate(ctx, runtime.StorageDir, cfg.ACME.Domains[0])
 	if err != nil {
-		cfg.LastApply = SynologyOperationState{Success: false, At: time.Now(), ConfigHash: cfg.ConfigHash(), Message: err.Error()}
-		_ = saveSynologyConfig(configPath, cfg)
+		if current, _, saveErr := recordSynologyApplyState(configPath, startingHash, startingEditToken, SynologyOperationState{Success: false, At: time.Now(), ConfigHash: startingHash, Message: err.Error()}, false); saveErr == nil {
+			starting = current
+		}
 		appendSynologyLog(cfg, "certificate lookup failed: "+err.Error())
-		return newSynologyTaskResult(cfg, "failed"), err
+		return newSynologyTaskResult(starting, "failed"), err
 	}
 	matches, err := privateKeyMatchesKeyType(keyPath, cfg.ACME.KeyType)
 	if err != nil {
-		cfg.LastApply = SynologyOperationState{Success: false, At: time.Now(), ConfigHash: cfg.ConfigHash(), Message: err.Error()}
-		_ = saveSynologyConfig(configPath, cfg)
+		if current, _, saveErr := recordSynologyApplyState(configPath, startingHash, startingEditToken, SynologyOperationState{Success: false, At: time.Now(), ConfigHash: startingHash, Message: err.Error()}, false); saveErr == nil {
+			starting = current
+		}
 		appendSynologyLog(cfg, "certificate key inspection failed: "+err.Error())
-		return newSynologyTaskResult(cfg, "failed"), err
+		return newSynologyTaskResult(starting, "failed"), err
 	}
 	if !matches {
 		// CertMagic may reuse a valid cached certificate after the requested key
@@ -152,37 +204,44 @@ func runSynologyApply(ctx context.Context, configPath string) (synologyTaskResul
 		// again so DSM receives a key with the selected size.
 		appendSynologyLog(cfg, "stored certificate key type does not match current configuration; requesting replacement")
 		if err := removeStoredCertificate(runtime.StorageDir, cfg.ACME.Domains[0]); err != nil {
-			cfg.LastApply = SynologyOperationState{Success: false, At: time.Now(), ConfigHash: cfg.ConfigHash(), Message: err.Error()}
-			_ = saveSynologyConfig(configPath, cfg)
+			if current, _, saveErr := recordSynologyApplyState(configPath, startingHash, startingEditToken, SynologyOperationState{Success: false, At: time.Now(), ConfigHash: startingHash, Message: err.Error()}, false); saveErr == nil {
+				starting = current
+			}
 			appendSynologyLog(cfg, "stored certificate cleanup failed: "+err.Error())
-			return newSynologyTaskResult(cfg, "failed"), err
+			return newSynologyTaskResult(starting, "failed"), err
 		}
 		if err := ObtainOnce(ctx, &runtime, false); err != nil {
-			cfg.LastApply = SynologyOperationState{Success: false, At: time.Now(), ConfigHash: cfg.ConfigHash(), Message: err.Error()}
-			_ = saveSynologyConfig(configPath, cfg)
+			if current, _, saveErr := recordSynologyApplyState(configPath, startingHash, startingEditToken, SynologyOperationState{Success: false, At: time.Now(), ConfigHash: startingHash, Message: err.Error()}, false); saveErr == nil {
+				starting = current
+			}
 			appendSynologyLog(cfg, "replacement production ACME issuance failed: "+err.Error())
-			return newSynologyTaskResult(cfg, "failed"), err
+			return newSynologyTaskResult(starting, "failed"), err
 		}
 		keyPath, certPath, err = findStoredCertificate(ctx, runtime.StorageDir, cfg.ACME.Domains[0])
 		if err != nil {
-			cfg.LastApply = SynologyOperationState{Success: false, At: time.Now(), ConfigHash: cfg.ConfigHash(), Message: err.Error()}
-			_ = saveSynologyConfig(configPath, cfg)
+			if current, _, saveErr := recordSynologyApplyState(configPath, startingHash, startingEditToken, SynologyOperationState{Success: false, At: time.Now(), ConfigHash: startingHash, Message: err.Error()}, false); saveErr == nil {
+				starting = current
+			}
 			appendSynologyLog(cfg, "replacement certificate lookup failed: "+err.Error())
-			return newSynologyTaskResult(cfg, "failed"), err
+			return newSynologyTaskResult(starting, "failed"), err
 		}
 	}
 	if err := deploySynologyStoredCertificate(ctx, cfg, cfg.ACME.Domains[0], keyPath, certPath); err != nil {
-		cfg.LastApply = SynologyOperationState{Success: false, At: time.Now(), ConfigHash: cfg.ConfigHash(), Message: err.Error()}
-		_ = saveSynologyConfig(configPath, cfg)
-		return newSynologyTaskResult(cfg, "failed"), err
+		if current, _, saveErr := recordSynologyApplyState(configPath, startingHash, startingEditToken, SynologyOperationState{Success: false, At: time.Now(), ConfigHash: startingHash, Message: err.Error()}, false); saveErr == nil {
+			starting = current
+		}
+		return newSynologyTaskResult(starting, "failed"), err
 	}
 
-	cfg.Reconfiguring = false
-	cfg.LastApply = SynologyOperationState{Success: true, At: time.Now(), ConfigHash: cfg.ConfigHash(), Message: "production certificate applied"}
-	if err := saveSynologyConfig(configPath, cfg); err != nil {
+	var updated bool
+	starting, updated, err = recordSynologyApplyState(configPath, startingHash, startingEditToken, SynologyOperationState{Success: true, At: time.Now(), ConfigHash: startingHash, Message: "production certificate applied"}, true)
+	if err != nil {
 		return synologyTaskResult{}, err
 	}
-	return newSynologyTaskResult(cfg, "ok"), nil
+	if !updated {
+		return newSynologyTaskResult(starting, "stale"), errSynologyConfigChanged
+	}
+	return newSynologyTaskResult(starting, "ok"), nil
 }
 
 var (
@@ -219,14 +278,14 @@ func runSynologyDaemon(ctx context.Context, configPath string) error {
 
 		cfg = normalizeSynologyConfig(cfg)
 		runtime := cfg.RuntimeConfig(false)
-		if _, err := validateConfig(runtime); err != nil {
+		if err := validateConfigForSynology(cfg, false); err != nil {
 			appendSynologyLog(cfg, "waiting for valid config: "+err.Error())
 			if waitSynologyDaemonRetry(ctx) {
 				return nil
 			}
 			continue
 		}
-		if !cfg.CanRenew() {
+		if cfg.Reconfiguring || !cfg.CanRenew() {
 			appendSynologyLog(cfg, "waiting for successful apply before production renewal")
 			if waitSynologyDaemonRetry(ctx) {
 				return nil
@@ -253,7 +312,7 @@ func runSynologyDaemon(ctx context.Context, configPath string) error {
 			continue
 		}
 		appendSynologyLog(cfg, "renewal daemon running")
-		changed := waitForSynologyConfigChange(ctx, configPath, cfg.ConfigHash())
+		changed := waitForSynologyConfigChange(ctx, configPath, cfg.RenewalRuntimeKey())
 		cancelManager()
 		stop()
 		if !changed {
@@ -264,7 +323,7 @@ func runSynologyDaemon(ctx context.Context, configPath string) error {
 }
 
 // monitorSynologyConfigChange returns true only for a successfully read config
-// whose normalized configuration hash or renewal gate differs. Transient read
+// whose normalized renewal runtime key or renewal gate differs. Transient read
 // errors leave the active manager running and are retried on the next interval.
 func monitorSynologyConfigChange(ctx context.Context, configPath, activeKey string) bool {
 	ticker := time.NewTicker(synologyDaemonRetryInterval)
@@ -279,7 +338,7 @@ func monitorSynologyConfigChange(ctx context.Context, configPath, activeKey stri
 				continue
 			}
 			cfg = normalizeSynologyConfig(cfg)
-			if cfg.ConfigHash() != activeKey || !cfg.CanRenew() {
+			if cfg.Reconfiguring || cfg.RenewalRuntimeKey() != activeKey || !cfg.CanRenew() {
 				return true
 			}
 		}
@@ -306,6 +365,11 @@ func waitSynologyDaemonInterval(ctx context.Context, interval time.Duration) boo
 }
 
 func validateConfigForSynology(cfg SynologyConfig, requireDeploy bool) error {
+	if strings.EqualFold(cfg.DNS.Provider, provider.AcmeDNS) {
+		if err := validateSynologyResolvers(cfg.DNS.Resolvers); err != nil {
+			return err
+		}
+	}
 	if _, err := validateConfig(cfg.RuntimeConfig(true)); err != nil {
 		return err
 	}

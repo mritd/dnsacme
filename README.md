@@ -75,6 +75,22 @@ WebAPI, and runs an unprivileged background daemon for automatic renewal.
 - Keep production and staging certificates in separate storage directories.
 - Preserve package configuration, certificate storage, and logs across package upgrades. The uninstall wizard also keeps them by default and removes them only when the user explicitly selects the delete option.
 
+When configuring ACME-DNS in the wizard, either enter credentials for an existing
+account or click **Register account** and confirm the server. Registration only fills
+the form; the credentials are not saved until you click **Next**. Closing the wizard
+before then discards them. Once the account details are complete, create the displayed
+CNAME in your authoritative DNS service, pointing the `_acme-challenge` name to the
+ACME-DNS full domain. DNSACME does not create this record for you.
+
+The **Recursive DNS** field accepts one or more resolver addresses separated by
+commas and defaults to `1.1.1.1`. DNSACME uses these resolvers to check ACME-DNS
+record propagation.
+
+Delegating the challenge name allows the ACME-DNS service to satisfy DNS-01
+challenges for that domain. Before using a public service, review its policies and
+security posture. If you do not accept this trust boundary, run your own ACME-DNS
+server.
+
 Build the package (produces one SPK per architecture):
 
 ```sh
@@ -224,11 +240,12 @@ go build -tags synology
 
 ### DNS Config
 
-Currently dnsacme supports 9 DNS providers (theoretically more, and some have not been added yet),
-the providers supported by the `--dns` option are defined in [internal/provider/provider.go](https://github.com/mritd/dnsacme/blob/main/internal/provider/provider.go):
+DNSACME supports multiple DNS providers through `--dns`. The authoritative list is
+defined in [internal/provider/provider.go](https://github.com/mritd/dnsacme/blob/main/internal/provider/provider.go):
 
 ```go
 const (
+    AcmeDNS       = "acmedns"
     AliDNS        = "alidns"
     Azure         = "azure"
     Cloudflare    = "cloudflare"
@@ -241,7 +258,8 @@ const (
 )
 ```
 
-For each DNS provider has different configuration, the `--dns-config` option can be specified multiple times:
+Each DNS provider has its own settings. Pass `--dns-config` more than once to
+provide multiple values:
 
 ```sh
 dnsacme --dns alidns --dns-config=ALIDNS_ACCKEYID=xxxxxx --dns-config=ALIDNS_ACCKEYSECRET=xxxxxx ...
@@ -251,6 +269,11 @@ The configuration keys for each DNS provider are defined in [internal/provider/p
 
 ```go
 const (
+    AcmeDNSUsername             = "ACMEDNS_USERNAME"
+    AcmeDNSPassword             = "ACMEDNS_PASSWORD"
+    AcmeDNSSubdomain            = "ACMEDNS_SUBDOMAIN"
+    AcmeDNSFullDomain           = "ACMEDNS_FULLDOMAIN"
+    AcmeDNSServerURL            = "ACMEDNS_SERVER_URL"
     AliDNSAccessKeyID           = "ALIDNS_ACCKEYID"
     AliDNSAccessKeySecret       = "ALIDNS_ACCKEYSECRET"
     AliDNSRegionID              = "ALIDNS_REGIONID"
@@ -273,8 +296,13 @@ const (
 )
 ```
 
-**Currently, I don't use all DNS providers, so the configuration for some DNS providers is not verified in the code;**
-** for example, some parameters are required, but you don't set them, then an error in the CertMagic library will be returned. **
+With `--dns acmedns`, `ACMEDNS_USERNAME`, `ACMEDNS_PASSWORD`,
+`ACMEDNS_SUBDOMAIN`, and `ACMEDNS_SERVER_URL` are required. `ACMEDNS_FULLDOMAIN`
+is optional for CLI certificate requests. The Synology wizard also requires it so
+the CNAME delegation target remains available when the wizard is reopened.
+
+Not every provider configuration has been tested by the maintainer. CertMagic
+reports an error when a required setting is missing or invalid.
 
 ### Hook Command
 

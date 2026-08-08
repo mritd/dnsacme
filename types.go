@@ -17,6 +17,7 @@ type Config struct {
 	KeyType       string
 	DNSProvider   string
 	DNSConfig     map[string]string
+	DNSResolvers  []string
 	ObtainingHook string
 	ObtainedHook  string
 	FailedHook    string

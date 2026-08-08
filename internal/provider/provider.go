@@ -11,6 +11,7 @@ import (
 // Provider names and credential keys are stable external configuration values.
 const (
 	AliDNS       = "alidns"
+	AcmeDNS      = "acmedns"
 	Azure        = "azure"
 	Cloudflare   = "cloudflare"
 	DuckDNS      = "duckdns"
@@ -25,6 +26,11 @@ const (
 	AliDNSAccessKeyID           = "ALIDNS_ACCKEYID"
 	AliDNSAccessKeySecret       = "ALIDNS_ACCKEYSECRET"
 	AliDNSRegionID              = "ALIDNS_REGIONID"
+	AcmeDNSUsername             = "ACMEDNS_USERNAME"
+	AcmeDNSPassword             = "ACMEDNS_PASSWORD"
+	AcmeDNSSubdomain            = "ACMEDNS_SUBDOMAIN"
+	AcmeDNSFullDomain           = "ACMEDNS_FULLDOMAIN"
+	AcmeDNSServerURL            = "ACMEDNS_SERVER_URL"
 	AzureTenantID               = "AZURE_TENANTID"
 	AzureClientID               = "AZURE_CLIENTID"
 	AzureClientSecret           = "AZURE_CLIENTSECRET"

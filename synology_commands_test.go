@@ -19,7 +19,7 @@ func TestSynologyConfigResponse_Shape(t *testing.T) {
 	_ = os.WriteFile(dir+"/nginx.conf", []byte("server { root /usr/syno/synoman; listen 5001 default_server ssl; }"), 0o600)
 	cfgPath := dir + "/config.yaml"
 
-	resp := synologyConfigResponse(defaultSynologyConfig(), cfgPath)
+	resp := synologyConfigResponse(synologyConfigSnapshot{Config: defaultSynologyConfig()})
 	if _, ok := resp["configHash"]; ok {
 		t.Error("configHash must not be in the response")
 	}
@@ -34,7 +34,7 @@ func TestSynologyConfigResponse_Shape(t *testing.T) {
 	if err := saveSynologyConfig(cfgPath, defaultSynologyConfig()); err != nil {
 		t.Fatal(err)
 	}
-	resp = synologyConfigResponse(defaultSynologyConfig(), cfgPath)
+	resp = synologyConfigResponse(synologyConfigSnapshot{Config: defaultSynologyConfig(), Persisted: true})
 	if !resp["persisted"].(bool) {
 		t.Error("persisted should be true after save")
 	}
@@ -49,7 +49,12 @@ func TestSynologyConfigResponse_Shape(t *testing.T) {
 
 func TestCgiStatus_NoConfigHash(t *testing.T) {
 	dir := t.TempDir()
-	m, err := cgiStatus(dir + "/config.yaml")
+	path := dir + "/config.yaml"
+	cfg := defaultSynologyConfig()
+	if err := saveSynologyConfig(path, cfg); err != nil {
+		t.Fatal(err)
+	}
+	m, err := cgiStatus(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,6 +63,9 @@ func TestCgiStatus_NoConfigHash(t *testing.T) {
 	}
 	if _, ok := m.(map[string]any)["canRenew"]; !ok {
 		t.Error("cgiStatus should expose canRenew")
+	}
+	if got := m.(map[string]any)["editToken"]; got == "" {
+		t.Errorf("cgiStatus editToken = %v, want non-empty", got)
 	}
 }
 
