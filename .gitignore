@@ -2,6 +2,7 @@
 # Local planning artifacts are intentionally excluded from versioned sources.
 .superpowers/
 docs/superpowers/
+docs/design/
 
 # Locally generated screenshots and other temporary artifacts.
 /artifacts/
