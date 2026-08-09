@@ -97,6 +97,9 @@ func TestNewACMEIssuerScopesResolversToAcmeDNS(t *testing.T) {
 	issuer := newACMEIssuer(&Config{
 		DNSProvider:  provider.AcmeDNS,
 		DNSResolvers: resolvers,
+		DNSConfig: map[string]string{
+			provider.AcmeDNSFullDomain: " account.auth.acme-dns.io. \n",
+		},
 	}, magic, fakeDNSProvider{}, logger)
 	solver, ok := issuer.DNS01Solver.(*certmagic.DNS01Solver)
 	if !ok {
@@ -105,14 +108,33 @@ func TestNewACMEIssuerScopesResolversToAcmeDNS(t *testing.T) {
 	if got := solver.DNSManager.Resolvers; !reflect.DeepEqual(got, resolvers) {
 		t.Fatalf("ACME-DNS resolvers = %#v, want %#v", got, resolvers)
 	}
+	if solver.DNSManager.OverrideDomain != "account.auth.acme-dns.io" {
+		t.Fatalf("ACME-DNS override domain = %q, want %q", solver.DNSManager.OverrideDomain, "account.auth.acme-dns.io")
+	}
 	resolvers[0] = "changed"
 	if solver.DNSManager.Resolvers[0] != "1.1.1.1" {
 		t.Fatal("issuer retained the caller's resolver slice")
 	}
 
 	issuer = newACMEIssuer(&Config{
+		DNSProvider:  provider.AcmeDNS,
+		DNSResolvers: []string{"9.9.9.9"},
+		DNSConfig:    map[string]string{},
+	}, magic, fakeDNSProvider{}, logger)
+	solver, ok = issuer.DNS01Solver.(*certmagic.DNS01Solver)
+	if !ok {
+		t.Fatalf("DNS01 solver = %T, want *certmagic.DNS01Solver", issuer.DNS01Solver)
+	}
+	if solver.DNSManager.OverrideDomain != "" {
+		t.Fatalf("ACME-DNS issuer without full domain received override domain: %q", solver.DNSManager.OverrideDomain)
+	}
+
+	issuer = newACMEIssuer(&Config{
 		DNSProvider:  provider.Cloudflare,
 		DNSResolvers: []string{"1.1.1.1"},
+		DNSConfig: map[string]string{
+			provider.AcmeDNSFullDomain: "account.auth.acme-dns.io",
+		},
 	}, magic, fakeDNSProvider{}, logger)
 	solver, ok = issuer.DNS01Solver.(*certmagic.DNS01Solver)
 	if !ok {
@@ -120,6 +142,9 @@ func TestNewACMEIssuerScopesResolversToAcmeDNS(t *testing.T) {
 	}
 	if len(solver.DNSManager.Resolvers) != 0 {
 		t.Fatalf("non-ACME-DNS issuer received resolvers: %#v", solver.DNSManager.Resolvers)
+	}
+	if solver.DNSManager.OverrideDomain != "" {
+		t.Fatalf("non-ACME-DNS issuer received override domain: %q", solver.DNSManager.OverrideDomain)
 	}
 }
 

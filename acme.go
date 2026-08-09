@@ -199,8 +199,10 @@ func newCertMagicConfig(conf *Config, logger *zap.Logger) *certmagic.Config {
 
 func newACMEIssuer(conf *Config, magic *certmagic.Config, dnsProvider certmagic.DNSProvider, logger *zap.Logger) *certmagic.ACMEIssuer {
 	var resolvers []string
+	var overrideDomain string
 	if strings.EqualFold(conf.DNSProvider, provider.AcmeDNS) {
 		resolvers = append([]string(nil), conf.DNSResolvers...)
+		overrideDomain = strings.TrimSuffix(strings.TrimSpace(conf.DNSConfig[provider.AcmeDNSFullDomain]), ".")
 	}
 	issuer := certmagic.NewACMEIssuer(magic, certmagic.ACMEIssuer{
 		Agreed:                  true,
@@ -209,8 +211,9 @@ func newACMEIssuer(conf *Config, magic *certmagic.Config, dnsProvider certmagic.
 		Email:                   conf.Email,
 		DNS01Solver: &certmagic.DNS01Solver{
 			DNSManager: certmagic.DNSManager{
-				DNSProvider: dnsProvider,
-				Resolvers:   resolvers,
+				DNSProvider:    dnsProvider,
+				Resolvers:      resolvers,
+				OverrideDomain: overrideDomain,
 			},
 		},
 		Logger: logger,
