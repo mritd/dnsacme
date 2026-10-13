@@ -9,7 +9,7 @@ require (
 	github.com/libdns/azure v0.5.0
 	github.com/libdns/cloudflare v0.2.2
 	github.com/libdns/duckdns v0.3.0
-	github.com/libdns/gandi v1.1.0
+	github.com/libdns/gandi v1.2.1
 	github.com/libdns/godaddy v1.1.0
 	github.com/libdns/hetzner/v2 v2.0.1
 	github.com/libdns/huaweicloud v1.0.1
