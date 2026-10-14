@@ -67,8 +67,8 @@ github.com/libdns/cloudflare v0.2.2 h1:XWHv+C1dDcApqazlh08Q6pjytYLgR2a+Y3xrXFu0v
 github.com/libdns/cloudflare v0.2.2/go.mod h1:w9uTmRCDlAoafAsTPnn2nJ0XHK/eaUMh86DUk8BWi60=
 github.com/libdns/duckdns v0.3.0 h1:YsNlEDrA/F6dOjOCPewS9wqA9OKE5Rduk5eVpAPdcQA=
 github.com/libdns/duckdns v0.3.0/go.mod h1:vYP8yqVE55XmLSj0LM3T2i4GO0tCyepXggsJvMwGwws=
-github.com/libdns/gandi v1.1.0 h1:gBBbx23xejvOpbUX7HRqCYsROYag5+OUMGhQXzAkol4=
-github.com/libdns/gandi v1.1.0/go.mod h1:HAbs4cfjYUX28d25Iyn9rq4oNLoVLpJ6YSkRFLbo9IE=
+github.com/libdns/gandi v1.2.1 h1:ELR7CvYA3ykJLOwWYpcJwjnjyWcDVb/4Lf86F7suA9E=
+github.com/libdns/gandi v1.2.1/go.mod h1:HAbs4cfjYUX28d25Iyn9rq4oNLoVLpJ6YSkRFLbo9IE=
 github.com/libdns/godaddy v1.1.0 h1:mxB107yFulEGApacljrCfaR4faR/9d9SyrGmjD2VubU=
 github.com/libdns/godaddy v1.1.0/go.mod h1:ZU6B93OoBN8jTbN97Ud5QdgbNvd6asV0EO8KVrGMWm4=
 github.com/libdns/hetzner/v2 v2.0.1 h1:phsNc9er8JbVOCsytLG7VuMbCdTPsv+WWwNX1WCbk4Q=
