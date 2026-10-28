@@ -254,6 +254,7 @@ const (
     GoDaddy       = "godaddy"
     HetznerCloud  = "hetznercloud"
     HuaweiCloud   = "huaweicloud"
+    Route53       = "route53"
     TencentCloud  = "tencentcloud"
 )
 ```
@@ -291,6 +292,10 @@ const (
     HuaweiCloudAccessKeyID      = "HUAWEICLOUD_ACCKEYID"
     HuaweiCloudAccessKeySecret  = "HUAWEICLOUD_ACCKEYSECRET"
     HuaweiCloudRegionID         = "HUAWEICLOUD_REGIONID"
+    Route53AccessKeyID          = "ROUTE53_ACCESS_KEY_ID"
+    Route53SecretAccessKey      = "ROUTE53_SECRET_ACCESS_KEY"
+    Route53Region               = "ROUTE53_REGION"
+    Route53HostedZoneID         = "ROUTE53_HOSTED_ZONE_ID"
     TencentCloudAccessKeyID     = "TENCENTCLOUD_ACCKEYID"
     TencentCloudAccessKeySecret = "TENCENTCLOUD_ACCKEYSECRET"
 )
@@ -300,6 +305,38 @@ With `--dns acmedns`, `ACMEDNS_USERNAME`, `ACMEDNS_PASSWORD`,
 `ACMEDNS_SUBDOMAIN`, and `ACMEDNS_SERVER_URL` are required. `ACMEDNS_FULLDOMAIN`
 is optional for CLI certificate requests. The Synology wizard also requires it so
 the CNAME delegation target remains available when the wizard is reopened.
+
+With `--dns route53`, `ROUTE53_ACCESS_KEY_ID` and `ROUTE53_SECRET_ACCESS_KEY`
+are required. Use a long-term IAM user access key: the AWS default credential
+chain (`~/.aws`, instance roles) and temporary session credentials are not
+supported, because temporary credentials expire long before renewal.
+`ROUTE53_REGION` defaults to `us-east-1`; set it only for other AWS partitions,
+such as `cn-northwest-1` for AWS China. `ROUTE53_HOSTED_ZONE_ID` is optional and
+is discovered from the domain when empty. Set it when a public and a private
+hosted zone share the same name. Other `AWS_*` environment variables, such as
+`AWS_PROFILE`, are still read by the AWS SDK; an invalid value is reported as a
+provider configuration error. A minimal IAM policy:
+
+```json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "route53:ListResourceRecordSets",
+                "route53:ChangeResourceRecordSets"
+            ],
+            "Resource": "arn:aws:route53:::hostedzone/YOUR_HOSTED_ZONE_ID"
+        },
+        {
+            "Effect": "Allow",
+            "Action": "route53:ListHostedZonesByName",
+            "Resource": "*"
+        }
+    ]
+}
+```
 
 Not every provider configuration has been tested by the maintainer. CertMagic
 reports an error when a required setting is missing or invalid.

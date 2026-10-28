@@ -208,6 +208,7 @@ const (
     GoDaddy       = "godaddy"
     HetznerCloud  = "hetznercloud"
     HuaweiCloud   = "huaweicloud"
+    Route53       = "route53"
     TencentCloud  = "tencentcloud"
 )
 ```
@@ -244,12 +245,39 @@ const (
     HuaweiCloudAccessKeyID      = "HUAWEICLOUD_ACCKEYID"
     HuaweiCloudAccessKeySecret  = "HUAWEICLOUD_ACCKEYSECRET"
     HuaweiCloudRegionID         = "HUAWEICLOUD_REGIONID"
+    Route53AccessKeyID          = "ROUTE53_ACCESS_KEY_ID"
+    Route53SecretAccessKey      = "ROUTE53_SECRET_ACCESS_KEY"
+    Route53Region               = "ROUTE53_REGION"
+    Route53HostedZoneID         = "ROUTE53_HOSTED_ZONE_ID"
     TencentCloudAccessKeyID     = "TENCENTCLOUD_ACCKEYID"
     TencentCloudAccessKeySecret = "TENCENTCLOUD_ACCKEYSECRET"
 )
 ```
 
 使用 `--dns acmedns` 时, 必须提供 `ACMEDNS_USERNAME`, `ACMEDNS_PASSWORD`, `ACMEDNS_SUBDOMAIN` 和 `ACMEDNS_SERVER_URL`. CLI 申请证书时可以省略 `ACMEDNS_FULLDOMAIN`, 但 Synology 向导也会要求填写它, 以便重新打开向导后继续显示 CNAME 委派目标.
+
+使用 `--dns route53` 时, 必须提供 `ROUTE53_ACCESS_KEY_ID` 和 `ROUTE53_SECRET_ACCESS_KEY`, 请使用 IAM 用户的长期访问密钥. DNSACME 不支持 AWS 默认凭证链 (`~/.aws`, 实例角色等) 和带 Session Token 的临时凭证, 因为临时凭证会在续期前过期. `ROUTE53_REGION` 默认为 `us-east-1`, 只有使用其他 AWS 分区时才需要设置, 比如 AWS 中国区使用 `cn-northwest-1`. `ROUTE53_HOSTED_ZONE_ID` 为可选项, 留空时会根据域名自动查找; 如果存在同名的公有和私有托管区域, 请明确填写. AWS SDK 仍会读取其他 `AWS_*` 环境变量 (如 `AWS_PROFILE`), 值无效时会作为 DNS 服务商配置错误返回. 最小 IAM 策略示例:
+
+```json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "route53:ListResourceRecordSets",
+                "route53:ChangeResourceRecordSets"
+            ],
+            "Resource": "arn:aws:route53:::hostedzone/YOUR_HOSTED_ZONE_ID"
+        },
+        {
+            "Effect": "Allow",
+            "Action": "route53:ListHostedZonesByName",
+            "Resource": "*"
+        }
+    ]
+}
+```
 
 维护者尚未测试所有 DNS 服务商的配置. 如果缺少必填项或配置值无效, CertMagic 会返回相应错误.
 

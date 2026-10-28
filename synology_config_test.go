@@ -860,6 +860,12 @@ func expectedProviderDefinitions() []provider.Definition {
 			{Key: provider.HuaweiCloudAccessKeySecret, Label: "Secret AccessKey", Secret: true, Required: true},
 			{Key: provider.HuaweiCloudRegionID, Label: "Region ID", Placeholder: "cn-south-1"},
 		}},
+		{Name: provider.Route53, Label: "AWS Route 53", Fields: []provider.Field{
+			{Key: provider.Route53AccessKeyID, Label: "Access Key ID", Required: true, Placeholder: "AKIA..."},
+			{Key: provider.Route53SecretAccessKey, Label: "Secret Access Key", Secret: true, Required: true},
+			{Key: provider.Route53Region, Label: "Region", Placeholder: "us-east-1"},
+			{Key: provider.Route53HostedZoneID, Label: "Hosted Zone ID", Placeholder: "auto-detect from domain"},
+		}},
 		{Name: provider.TencentCloud, Label: "Tencent Cloud DNS", Fields: []provider.Field{
 			{Key: provider.TencentCloudAccessKeyID, Label: "Secret ID", Required: true, Placeholder: "AKID..."},
 			{Key: provider.TencentCloudAccessKeySecret, Label: "Secret Key", Secret: true, Required: true},

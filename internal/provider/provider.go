@@ -19,6 +19,7 @@ const (
 	GoDaddy      = "godaddy"
 	HetznerCloud = "hetznercloud"
 	HuaweiCloud  = "huaweicloud"
+	Route53      = "route53"
 	TencentCloud = "tencentcloud"
 
 	DefaultName = Cloudflare
@@ -45,6 +46,10 @@ const (
 	HuaweiCloudAccessKeyID      = "HUAWEICLOUD_ACCKEYID"
 	HuaweiCloudAccessKeySecret  = "HUAWEICLOUD_ACCKEYSECRET"
 	HuaweiCloudRegionID         = "HUAWEICLOUD_REGIONID"
+	Route53AccessKeyID          = "ROUTE53_ACCESS_KEY_ID"
+	Route53SecretAccessKey      = "ROUTE53_SECRET_ACCESS_KEY"
+	Route53Region               = "ROUTE53_REGION"
+	Route53HostedZoneID         = "ROUTE53_HOSTED_ZONE_ID"
 	TencentCloudAccessKeyID     = "TENCENTCLOUD_ACCKEYID"
 	TencentCloudAccessKeySecret = "TENCENTCLOUD_ACCKEYSECRET"
 )
