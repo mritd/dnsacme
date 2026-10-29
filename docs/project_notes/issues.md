@@ -28,9 +28,12 @@ Ticket-related work can be recorded here using concise dated entries.
 
 ### 2026-10-29 - #111: Synology TOTP and trusted-device authentication
 
-- **Status**: In Progress
+- **Status**: Completed
 - **Description**: Add explicit OTP enrollment, private trusted-device persistence, daily authentication checks, DSM notifications and recoverable renewal deployment failures.
 - **URL**: https://github.com/mritd/dnsacme/issues/111
-- **Notes**: Authentication state is separate from certificate configuration. Reauthentication does not enter reconfiguration or invalidate a successful Apply. Real DSM enrollment and renewal deployment verification remain pending.
-- **Verification**: Default and Synology Go tests, Synology race tests and vet, JavaScript syntax and authentication-dialog behavior checks passed. AMD64 and ARM64 SPKs build successfully. Authentication, revoked-device, failed-import and redaction tests also passed as a Linux AMD64 test binary on a DS918+ running DSM 7.3.2, using simulated DSM HTTP responses; this is not yet a live OTP/import test.
-- **Device upgrade**: Upgraded the DS918+ from package `1.0.9-2` to test package `1.0.9-13` (UI build 118) after a private backup. Configuration checksum and `0600` permissions were preserved, the daemon runs as the package account, and the installed binary SHA-256 matches the tested SPK. Live OTP enrollment remains pending.
+- **PR**: https://github.com/mritd/dnsacme/pull/114
+- **Notes**: Authentication state is separate from certificate configuration. Reauthentication does not enter reconfiguration or invalidate a successful Apply.
+- **Automated verification**: Default and Synology Go tests, Synology race tests and vet, JavaScript syntax and authentication-dialog behavior checks passed. Linux builds passed for 386, ARMv5, ARMv7, AMD64 v1 and ARM64. Authentication, revoked-device, failed-import and redaction tests also passed on a DS918+ running DSM 7.3.2 against simulated DSM HTTP responses.
+- **Device upgrade**: Upgraded the DS918+ from package `1.0.9-2` to test package `1.0.9-13` (UI build 118) after a private backup. Configuration checksum and `0600` permissions were preserved, the daemon runs as the package account, and the installed binary SHA-256 matches the tested SPK.
+- **Live verification**: The administrator completed OTP enrollment and production Let's Encrypt issuance through Cloudflare DNS-01, followed by successful DSM import and renewal-daemon startup. A separate CGI authentication request with an empty OTP succeeded using the persisted trusted device. The configuration and edit token remained unchanged, authentication state has mode `0600` and package-user ownership, renewal is enabled, and no deployment is pending.
+- **Limits**: A time-triggered renewal, deliberate live trusted-device revocation/recovery and DSM notification delivery have not been exercised. Their state transitions and retry behavior are covered by automated tests.

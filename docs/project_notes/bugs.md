@@ -38,3 +38,10 @@ Resolved bugs and their prevention notes are recorded here.
 - **Root Cause**: The ACME-DNS issuer passed custom recursive resolvers to CertMagic but did not set `DNSManager.OverrideDomain`. CertMagic therefore ran generic SOA zone discovery against the original `_acme-challenge` name before calling the libdns provider.
 - **Solution**: For ACME-DNS only, normalize the saved `ACMEDNS_FULLDOMAIN` and pass it as CertMagic's override domain. Empty CLI values retain the previous generic behavior.
 - **Prevention**: Delegated DNS providers must explicitly connect their persisted delegation target to the solver's presentation and propagation-check target, with tests covering provider scoping and empty-value compatibility.
+
+### 2026-10-29 - DSM TOTP accounts failed certificate deployment with code 403
+
+- **Issue**: DSM accounts protected by TOTP could not authenticate for certificate import or unattended renewal (#111).
+- **Root Cause**: Login sent no OTP and did not retain a DSM trusted-device credential.
+- **Solution**: Add explicit OTP enrollment and reuse the returned device credential from private operational state. Freeze unattended retries after terminal authentication failures and expose recovery through the DSM sign-in action.
+- **Prevention**: Cover enrollment, credential reuse/redaction, revoked trust, pending imports and configuration conflicts in tests. Verify the real DSM protocol on-device; enrollment, OTP-free reuse and production import passed on DSM 7.3.2.
