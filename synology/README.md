@@ -60,6 +60,10 @@ Direct package CGI requests explicitly validate the active DSM browser session
 using DSM's native `authenticate.cgi`, then require membership of `administrators`.
 The UI obtains a same-origin, session-bound CSRF token before other requests.
 This is separate from the operational trusted-device account used by renewals.
-After upgrading, reload DSM to load UI build 120; cached older JavaScript will be
+After upgrading, reload DSM to load UI build 121; cached older JavaScript will be
 rejected. The package-private `config.yaml.browser-csrf` file must be preserved
 with the package configuration and is never an API response.
+
+The frontend first queries DSM's official `SYNO.API.Auth` token endpoint and
+sends `X-SYNO-TOKEN` to the native session validator, in addition to the separate
+package CSRF token. Neither token is persisted in browser storage.

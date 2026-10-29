@@ -1,7 +1,7 @@
 Ext.ns("SYNO.SDS.DNSACME");
 
 // Source/package cache marker used to confirm that DSM loaded the rebuilt UI.
-SYNO.SDS.DNSACME.BUILD = 120;
+SYNO.SDS.DNSACME.BUILD = 121;
 
 // Every API call explicitly verifies the DSM session, admin role and CSRF.
 // Browser authorization remains separate from the certificate deployment login.
@@ -116,6 +116,7 @@ SYNO.SDS.DNSACME.I18N = {
     "error.requestFailed": "Request failed",
     "error.invalidResponse": "Invalid response",
     "error.http": "HTTP {status}",
+    "error.nativeSession": "DSM session verification failed; sign in to DSM and reopen DNSACME",
     "field.acmeDNSUsername": "Username",
     "field.acmeDNSPassword": "Password",
     "field.acmeDNSSubdomain": "Subdomain",
@@ -237,6 +238,7 @@ SYNO.SDS.DNSACME.I18N = {
     "error.requestFailed": "请求失败",
     "error.invalidResponse": "响应格式无效",
     "error.http": "HTTP {status}",
+    "error.nativeSession": "DSM 会话验证失败，请登录 DSM 并重新打开 DNSACME",
     "field.acmeDNSUsername": "用户名",
     "field.acmeDNSPassword": "密码",
     "field.acmeDNSSubdomain": "子域标识",
@@ -421,6 +423,22 @@ SYNO.SDS.DNSACME.injectCss = function () {
 SYNO.SDS.DNSACME.request = function (action, method, data, cb, scope) {
   var api = SYNO.SDS.DNSACME;
   if (api.csrfToken) { api.sendRequest(action, method, data, cb, scope); return; }
+  if (!api.nativeToken) {
+    Ext.Ajax.request({
+      url: "/webapi/auth.cgi?api=SYNO.API.Auth&version=6&method=token", method: "GET",
+      success: function (response) {
+        var body;
+        try { body = Ext.decode(response.responseText); } catch (e) { body = null; }
+        if (!body || !body.success || !body.data || !body.data.synotoken) {
+          cb.call(scope, false, api.t("error.nativeSession")); return;
+        }
+        api.nativeToken = body.data.synotoken;
+        api.request(action, method, data, cb, scope);
+      },
+      failure: function () { cb.call(scope, false, api.t("error.nativeSession")); }
+    });
+    return;
+  }
   api.sendRequest("csrf", "GET", null, function (ok, result) {
     if (!ok) { cb.call(scope, false, result); return; }
     api.csrfToken = result.csrfToken;
@@ -431,7 +449,7 @@ SYNO.SDS.DNSACME.sendRequest = function (action, method, data, cb, scope) {
   Ext.Ajax.request({
     url: SYNO.SDS.DNSACME.API + "?action=" + encodeURIComponent(action),
     method: method || "GET",
-    headers: { "X-DNSACME-CSRF": SYNO.SDS.DNSACME.csrfToken || "" },
+    headers: { "X-DNSACME-CSRF": SYNO.SDS.DNSACME.csrfToken || "", "X-SYNO-TOKEN": SYNO.SDS.DNSACME.nativeToken || "" },
     jsonData: method === "POST" ? (data || {}) : undefined,
     // Exceed the Go operation context (20 minutes) so the CGI can return a
     // definitive envelope before the transport-level reconciliation path runs.
@@ -451,7 +469,7 @@ SYNO.SDS.DNSACME.sendRequest = function (action, method, data, cb, scope) {
       cb.call(scope, true, body.data);
     },
     failure: function (response) {
-      if (response.status === 401 || response.status === 403) { SYNO.SDS.DNSACME.csrfToken = null; }
+      if (response.status === 401 || response.status === 403) { SYNO.SDS.DNSACME.csrfToken = null; SYNO.SDS.DNSACME.nativeToken = null; }
       var body;
       try {
         body = response.responseText ? Ext.decode(response.responseText) : null;
