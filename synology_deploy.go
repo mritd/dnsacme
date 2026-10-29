@@ -26,17 +26,28 @@ var synologyHTTPClient = &http.Client{Timeout: 60 * time.Second}
 // synologyAPIClient carries the SID and CSRF token returned by one DSM login.
 // Both values are required by certificate import endpoints on DSM 7.
 type synologyAPIClient struct {
-	baseURL  string
-	account  string
-	password string
-	sid      string
-	token    string
-	client   *http.Client
+	baseURL    string
+	account    string
+	password   string
+	sid        string
+	token      string
+	client     *http.Client
+	deviceID   string
+	deviceName string
 }
 
 // deploySynologyCertificate loads CertMagic's files, separates the leaf from its
 // intermediates, and imports the resulting multipart payload into DSM.
 func deploySynologyCertificate(ctx context.Context, cfg SynologyDeployConfig, keyPath, certPath string) error {
+	client := newSynologyAPIClient(cfg)
+	if err := client.login(ctx); err != nil {
+		return err
+	}
+	defer func() { _ = client.logout(context.Background()) }()
+	return client.importCertificateFiles(ctx, cfg, keyPath, certPath)
+}
+
+func (c *synologyAPIClient) importCertificateFiles(ctx context.Context, cfg SynologyDeployConfig, keyPath, certPath string) error {
 	keyPEM, err := os.ReadFile(keyPath)
 	if err != nil {
 		return err
@@ -49,19 +60,12 @@ func deploySynologyCertificate(ctx context.Context, cfg SynologyDeployConfig, ke
 	if err != nil {
 		return err
 	}
-
-	client := newSynologyAPIClient(cfg)
-	if err := client.login(ctx); err != nil {
-		return err
-	}
-	defer func() { _ = client.logout(context.Background()) }()
-
-	return client.importCertificate(ctx, cfg.CertificateDesc, cfg.Create, cfg.AsDefault, keyPEM, leaf, intermediate)
+	return c.importCertificate(ctx, cfg.CertificateDesc, cfg.Create, cfg.AsDefault, keyPEM, leaf, intermediate)
 }
 
 // verifySynologyLogin proves that the DSM endpoint accepts the configured account
 // without importing anything. It is used by test-run and as an apply preflight;
-// accounts that require an interactive OTP are not supported by this flow.
+// interactive OTP enrollment is handled separately by the authentication action.
 func verifySynologyLogin(ctx context.Context, cfg SynologyDeployConfig) error {
 	client := newSynologyAPIClient(cfg)
 	if err := client.login(ctx); err != nil {
@@ -88,41 +92,58 @@ func newSynologyAPIClient(cfg SynologyDeployConfig) *synologyAPIClient {
 			port = 5000
 		}
 	}
-	httpClient := synologyHTTPClient
+	baseClient := *synologyHTTPClient
+	baseClient.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	httpClient := &baseClient
 	if scheme == "https" && strings.EqualFold(host, "127.0.0.1") {
 		// DSM commonly serves a certificate whose names do not include the loopback
 		// address. Limit verification bypass to the literal local endpoint; remote
 		// hosts continue using the default verified transport.
 		httpClient = &http.Client{
-			Timeout:   60 * time.Second,
-			Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}, //nolint:gosec
+			Timeout:       60 * time.Second,
+			CheckRedirect: baseClient.CheckRedirect,
+			Transport:     &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}, //nolint:gosec
 		}
 	}
 	return &synologyAPIClient{
-		baseURL:  fmt.Sprintf("%s://%s:%d", scheme, host, port),
-		account:  cfg.Account,
-		password: cfg.Password,
-		client:   httpClient,
+		baseURL:    fmt.Sprintf("%s://%s:%d", scheme, host, port),
+		account:    cfg.Account,
+		password:   cfg.Password,
+		client:     httpClient,
+		deviceID:   cfg.DeviceID,
+		deviceName: cfg.DeviceName,
 	}
 }
 
 func (c *synologyAPIClient) login(ctx context.Context) error {
+	return c.loginWithOTP(ctx, "", "")
+}
+
+func (c *synologyAPIClient) loginWithOTP(ctx context.Context, otp, deviceName string) error {
 	values := url.Values{
-		"api":     {"SYNO.API.Auth"},
-		"version": {"6"},
-		"method":  {"login"},
-		"account": {c.account},
-		"passwd":  {c.password},
-		"session": {"Core"},
-		"format":  {"sid"},
-		// Package automation cannot prompt for a rotating OTP.
-		"otp_code": {""},
+		"api":      {"SYNO.API.Auth"},
+		"version":  {"6"},
+		"method":   {"login"},
+		"account":  {c.account},
+		"passwd":   {c.password},
+		"session":  {"Core"},
+		"format":   {"sid"},
+		"otp_code": {otp},
 		// The certificate APIs require SynoToken in addition to the session SID.
 		"enable_syno_token": {"yes"},
+	}
+	if otp != "" {
+		values.Set("enable_device_token", "yes")
+		values.Set("device_name", deviceName)
+	} else if c.deviceID != "" {
+		values.Set("device_name", c.deviceName)
+		values.Set("device_id", c.deviceID)
 	}
 	var result struct {
 		Success bool `json:"success"`
 		Data    struct {
+			DID       string `json:"did"`
+			DeviceID  string `json:"device_id"`
 			SID       string `json:"sid"`
 			SynoToken string `json:"synotoken"`
 		} `json:"data"`
@@ -132,10 +153,21 @@ func (c *synologyAPIClient) login(ctx context.Context) error {
 		return err
 	}
 	if !result.Success || result.Data.SID == "" || result.Data.SynoToken == "" {
-		return fmt.Errorf("Synology auth failed: %s", result.Error)
+		return &synologyAuthError{Code: result.Error.Code}
 	}
 	c.sid = result.Data.SID
 	c.token = result.Data.SynoToken
+	if result.Data.DeviceID != "" {
+		c.deviceID = result.Data.DeviceID
+	} else if result.Data.DID != "" {
+		c.deviceID = result.Data.DID
+	} else if otp != "" {
+		_ = c.logout(ctx)
+		return errors.New("DSM accepted the OTP but did not return a trusted device credential")
+	}
+	if otp != "" {
+		c.deviceName = deviceName
+	}
 	return nil
 }
 
