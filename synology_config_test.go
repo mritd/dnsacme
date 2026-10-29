@@ -1998,7 +1998,7 @@ func TestSynologyDeployClientFailures(t *testing.T) {
 	u, _ := url.Parse(authFail.URL)
 	host, port, _ := strings.Cut(u.Host, ":")
 	client := newSynologyAPIClient(SynologyDeployConfig{Scheme: u.Scheme, Host: host, Port: atoiForTest(port)})
-	if err := client.login(context.Background()); err == nil || !strings.Contains(err.Error(), "bad auth") {
+	if err := client.login(context.Background()); err == nil || !strings.Contains(err.Error(), "code 400") || strings.Contains(err.Error(), "bad auth") {
 		t.Fatalf("expected auth failure, got %v", err)
 	}
 

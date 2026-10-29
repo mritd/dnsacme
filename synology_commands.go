@@ -109,6 +109,19 @@ func serveSynologyCGI(ctx context.Context, configPath string, getenv cgiEnv, inp
 			break
 		}
 		payload, err = cgiAcmeDNSRegister(ctx, method, configPath, input)
+	case "authenticate":
+		if method != http.MethodPost {
+			status = http.StatusMethodNotAllowed
+			err = fmt.Errorf("method %s is not allowed", method)
+			break
+		}
+		payload, err = cgiSynologyAuthenticate(ctx, method, configPath, input)
+	case "auth-status":
+		var cfg SynologyConfig
+		cfg, err = loadSynologyConfig(configPath)
+		if err == nil {
+			payload = synologyAuthView(configPath, cfg)
+		}
 	case "metadata":
 		definitions := provider.Definitions()
 		if len(definitions) == 0 {
@@ -275,6 +288,7 @@ func cgiStatus(configPath string) (any, error) {
 		// status so the UI's HTTP-0 reconciliation path can enter the deployed view
 		// without issuing a second request.
 		"config": cfg.Redacted(),
+		"auth":   synologyAuthView(configPath, cfg),
 	}, nil
 }
 

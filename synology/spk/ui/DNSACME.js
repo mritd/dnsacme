@@ -1,7 +1,7 @@
 Ext.ns("SYNO.SDS.DNSACME");
 
 // Source/package cache marker used to confirm that DSM loaded the rebuilt UI.
-SYNO.SDS.DNSACME.BUILD = 117;
+SYNO.SDS.DNSACME.BUILD = 118;
 
 // DSM's protected package-app route is the CGI trust boundary; this same-origin
 // URL does not implement separate browser authentication.
@@ -12,6 +12,21 @@ SYNO.SDS.DNSACME.API = "/webman/3rdparty/dnsacme/api.cgi";
 // untranslated Chinese strings outside the localization boundary.
 SYNO.SDS.DNSACME.I18N = {
   en: {
+    "button.dsmSignIn": "DSM sign-in",
+    "field.otp": "One-time code",
+    "field.deviceName": "Device name",
+    "hint.dsmSignIn": "For accounts with 2FA, enter a current six-digit code to trust DNSACME. Leave the code empty for accounts without 2FA. Codes are never saved.",
+    "auth.unchecked": "DSM sign-in has not been checked",
+    "auth.ready": "DSM sign-in verified",
+    "auth.trusted": "Trusted device ready",
+    "auth.reauth": "DSM sign-in required. Use DSM sign-in with a fresh code.",
+    "auth.error": "DSM sign-in check failed. Check the connection and try again.",
+    "auth.pending": "A certificate is waiting to be installed in DSM. Check authentication and the logs.",
+    "auth.signingIn": "Signing in to DSM...",
+    "auth.invalidOTP": "Enter a six-digit code or leave it empty",
+    "auth.failed": "DSM sign-in failed: {error}",
+    "title.attention": "Auto Update Needs Attention",
+
     "step.certificate": "Certificate",
     "step.dns": "DNS Provider",
     "step.autoUpdate": "Auto Update",
@@ -113,6 +128,21 @@ SYNO.SDS.DNSACME.I18N = {
     "label.acmeDNSCNAMETo": "Target",
   },
   "zh-CN": {
+    "button.dsmSignIn": "DSM 登录",
+    "field.otp": "一次性验证码",
+    "field.deviceName": "设备名称",
+    "hint.dsmSignIn": "启用双重验证的账户请输入当前六位验证码以信任 DNSACME。未启用双重验证的账户请留空。验证码不会保存。",
+    "auth.unchecked": "尚未检查 DSM 登录",
+    "auth.ready": "DSM 登录已验证",
+    "auth.trusted": "受信任设备已就绪",
+    "auth.reauth": "需要重新登录 DSM。请点击 DSM 登录并输入新的验证码。",
+    "auth.error": "DSM 登录检查失败。请检查连接后重试。",
+    "auth.pending": "证书尚未安装到 DSM。请检查身份验证状态和日志。",
+    "auth.signingIn": "正在登录 DSM...",
+    "auth.invalidOTP": "请输入六位验证码或留空",
+    "auth.failed": "DSM 登录失败: {error}",
+    "title.attention": "自动更新需要处理",
+
     "step.certificate": "证书",
     "step.dns": "DNS 提供商",
     "step.autoUpdate": "自动更新",
@@ -482,6 +512,7 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
     this.on("beforedestroy", function () {
       me._closed = true;
       me.stopLogs();
+      if (me._authDialog) { me._authDialog.close(); }
       if (me.mainPanel && me.mainPanel.el) { me.mainPanel.el.unmask(); }
     }, this);
     // The log <pre> has no room to scroll the card region (autoScroll:false), so a
@@ -560,12 +591,13 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
     me.nextBtn = new SYNO.ux.Button({ text: SYNO.SDS.DNSACME.t("button.next"), btnStyle: "blue", handler: me.next, scope: me });
     me.testBtn = new SYNO.ux.Button({ text: SYNO.SDS.DNSACME.t("button.testRun"), handler: function () { me.requestAction("test-run"); } });
     me.applyBtn = new SYNO.ux.Button({ text: SYNO.SDS.DNSACME.t("button.apply"), btnStyle: "blue", handler: function () { me.requestAction("apply"); } });
+    me.authBtn = new SYNO.ux.Button({ text: SYNO.SDS.DNSACME.t("button.dsmSignIn"), handler: me.authenticateDSM, scope: me });
     me.reconfigBtn = new SYNO.ux.Button({ text: SYNO.SDS.DNSACME.t("button.reconfigure"), handler: me.reconfigure, scope: me });
 
     me.mainPanel = new Ext.Panel({
       layout: "border", border: false,
       items: [me.buildStepper(), me.cards],
-      bbar: new Ext.Toolbar({ items: [me.statusText, "->", me.prevBtn, me.nextBtn, me.testBtn, me.applyBtn, me.reconfigBtn] })
+      bbar: new Ext.Toolbar({ items: [me.statusText, "->", me.prevBtn, me.nextBtn, me.testBtn, me.applyBtn, me.authBtn, me.reconfigBtn] })
     });
   },
 
@@ -665,6 +697,7 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
 
   syncBar: function () {
     var me = this, i = me.step;
+    if (me.authBtn) { me.authBtn.setVisible(me.deployedMode || i === 2 || i === 3); }
     if (me.deployedMode) {
       me.prevBtn.hide();
       me.nextBtn.hide();
@@ -1067,11 +1100,81 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
     });
     me.advCollapsed = true;
 
-    var form = me.formPanel("synology", [me.fAccount, me.fPassword, me.fCertDesc, me.fCreate, me.fAsDefault, me.advToggle, me.advPanel], {
+    me.authStatusBox = new Ext.BoxComponent({ autoEl: { tag: "div", html: "" } });
+    var form = me.formPanel("synology", [me.fAccount, me.fPassword, me.authStatusBox, me.fCertDesc, me.fCreate, me.fAsDefault, me.advToggle, me.advPanel], {
       title: SYNO.SDS.DNSACME.t("title.autoUpdate"), subtitle: SYNO.SDS.DNSACME.t("subtitle.autoUpdate")
     });
     me.stepForms[2] = form;
     return form;
+  },
+
+  authStatusText: function () {
+    var auth = this._auth || {}, key = "auth.unchecked";
+    if (auth.status === "reauth_required") { key = "auth.reauth"; }
+    else if (auth.status === "error") { key = "auth.error"; }
+    else if (auth.deploymentPending) { key = "auth.pending"; }
+    else if (auth.status === "ready") { key = auth.trustedDevice ? "auth.trusted" : "auth.ready"; }
+    return SYNO.SDS.DNSACME.t(key);
+  },
+
+  refreshAuthStatus: function () {
+    var me = this;
+    me._authLoadedAt = Date.now();
+    SYNO.SDS.DNSACME.request("auth-status", "GET", null, function (ok, data) {
+      if (me._closed || !ok) { return; }
+      me._auth = data;
+      var text = Ext.util.Format.htmlEncode(me.authStatusText());
+      if (me.authStatusBox) {
+        if (me.authStatusBox.rendered) { me.authStatusBox.getEl().dom.innerHTML = text; }
+        else { me.authStatusBox.autoEl.html = text; }
+      }
+      if (me.deployedMode && me.cfg) { me.updateDeployedSummary(me.cfg); }
+    }, me);
+  },
+
+  authenticateDSM: function () {
+    var me = this;
+    if (me._actionRunning || me._authRunning) { return; }
+    if (me.deployedMode) { me.showDSMAuthDialog(); return; }
+    if (!me.validateStep(2)) { me.setStatus(SYNO.SDS.DNSACME.t("status.fixFields"), true); return; }
+    me.save(me.showDSMAuthDialog, me, { refresh: false });
+  },
+
+  showDSMAuthDialog: function () {
+    var me = this;
+    if (me._authDialog) { me._authDialog.show(); return; }
+    var otp = new SYNO.ux.TextField({ fieldLabel: SYNO.SDS.DNSACME.t("field.otp"), inputType: "password", width: 230, maxLength: 6 });
+    var device = new SYNO.ux.TextField({ fieldLabel: SYNO.SDS.DNSACME.t("field.deviceName"), width: 230, maxLength: 64, value: (me._auth && me._auth.deviceName) || "DNSACME" });
+    var submit = new SYNO.ux.Button({ text: SYNO.SDS.DNSACME.t("button.dsmSignIn"), handler: function () {
+      if (me._authRunning) { return; }
+      var code = otp.getValue();
+      if (code && !/^[0-9]{6}$/.test(code)) { otp.markInvalid(SYNO.SDS.DNSACME.t("auth.invalidOTP")); return; }
+      me._authRunning = true;
+      submit.setDisabled(true);
+      me.setStatus(SYNO.SDS.DNSACME.t("auth.signingIn"));
+      // This separate request is the only place an OTP leaves the dialog.
+      // It never enters collectConfig, provider drafts, logs or saved settings.
+      var request = { editToken: me.configEditToken, otp: code, deviceName: device.getValue() };
+      otp.setValue("");
+      SYNO.SDS.DNSACME.request("authenticate", "POST", request, function (ok, data) {
+        me._authRunning = false;
+        if (me._closed) { return; }
+        if (!submit.destroyed) { submit.setDisabled(false); }
+        me.refreshAuthStatus();
+        if (ok) {
+          me.setStatus(SYNO.SDS.DNSACME.t("auth.ready"));
+          if (me._authDialog) { me._authDialog.close(); }
+        } else { me.setStatus(SYNO.SDS.DNSACME.t("auth.failed", { error: data }), true); }
+      }, me);
+      code = "";
+    }});
+    me._authDialog = new Ext.Window({
+      title: SYNO.SDS.DNSACME.t("button.dsmSignIn"), modal: true, width: 480, autoHeight: true,
+      layout: "form", labelWidth: 135, bodyStyle: "padding:18px", closeAction: "close",
+      items: [{ xtype: "box", autoEl: { tag: "p", html: SYNO.SDS.DNSACME.t("hint.dsmSignIn") }, style: "margin-bottom:16px" }, otp, device],
+      buttons: [submit], listeners: { close: function () { otp.setValue(""); me._authDialog = null; } }
+    });
+    me._authDialog.show();
   },
 
   setAdvancedCollapsed: function (collapsed) {
@@ -1140,14 +1243,15 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
     var keyLabel = keyType === "rsa4096" ? "RSA 4096" : (keyType === "rsa2048" ? "RSA 2048" : keyType);
     var caLabel = ca === "letsencrypt" ? "Let's Encrypt" : (ca === "zerossl" ? "ZeroSSL" : ca);
     var html = [
-      '<div class="dnsacme-deployed-title">' + SYNO.SDS.DNSACME.t("title.running") + '</div>',
+      '<div class="dnsacme-deployed-title">' + (this._auth && (this._auth.status === "reauth_required" || this._auth.status === "error" || this._auth.deploymentPending) ? SYNO.SDS.DNSACME.t("title.attention") : SYNO.SDS.DNSACME.t("title.running")) + '</div>',
       '<div class="dnsacme-deployed-grid">',
       '<div class="dnsacme-deployed-line"><span>' + SYNO.SDS.DNSACME.t("summary.domain") + '</span><b>' + Ext.util.Format.htmlEncode(domains || "-") + '</b></div>',
       '<div class="dnsacme-deployed-line"><span>' + SYNO.SDS.DNSACME.t("summary.provider") + '</span><b>' + Ext.util.Format.htmlEncode(provider || "-") + '</b></div>',
       '<div class="dnsacme-deployed-line"><span>' + SYNO.SDS.DNSACME.t("summary.keyType") + '</span><b>' + Ext.util.Format.htmlEncode(keyLabel || "-") + '</b></div>',
       '<div class="dnsacme-deployed-line"><span>' + SYNO.SDS.DNSACME.t("summary.issuer") + '</span><b>' + Ext.util.Format.htmlEncode(caLabel || "-") + '</b></div>',
       '<div class="dnsacme-deployed-line"><span>' + SYNO.SDS.DNSACME.t("summary.lastApplied") + '</span><b>' + Ext.util.Format.htmlEncode(lastApply || "-") + '</b></div>',
-      '</div>'
+      '</div>',
+      '<div class="dnsacme-deployed-line">' + Ext.util.Format.htmlEncode(this.authStatusText()) + '</div>'
     ].join("");
     if (this.deployedSummary.rendered) { this.deployedSummary.getEl().dom.innerHTML = html; } else { this.deployedSummary.autoEl.html = html; }
   },
@@ -1513,6 +1617,7 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
     // in the controls; mergeSecrets restores their persisted values on save.
     me.cfg = cfg;
     me.configEditToken = editToken;
+    me.refreshAuthStatus();
     me.forceWizard = !!cfg.reconfiguring;
     me.fDomains.setValue((cfg.acme.domains || []).join("\n"));
     me.fEmail.setValue(cfg.acme.email || "");
@@ -1877,6 +1982,7 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
 
   loadLogs: function () {
     var me = this;
+    if (!me._authLoadedAt || Date.now() - me._authLoadedAt >= 30000) { me.refreshAuthStatus(); }
     SYNO.SDS.DNSACME.request("logs", "GET", null, function (ok, data) {
       if (me._closed || !ok) { return; }
       // Updating a hidden <pre> gives it clientHeight=0, which makes the tail
