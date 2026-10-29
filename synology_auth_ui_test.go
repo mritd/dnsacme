@@ -62,6 +62,7 @@ const context = {
   }
 };
 vm.runInNewContext(fs.readFileSync('synology/spk/ui/DNSACME.js', 'utf8'), context);
+context.SYNO.SDS.DNSACME.csrfToken = 'test-csrf';
 context.SYNO.SDS.DNSACME.combo = (config) => new Field(config);
 const proto = definitions['SYNO.SDS.DNSACME.MainWindow'];
 let saves = 0, refreshes = 0;

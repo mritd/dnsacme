@@ -1,10 +1,10 @@
 Ext.ns("SYNO.SDS.DNSACME");
 
 // Source/package cache marker used to confirm that DSM loaded the rebuilt UI.
-SYNO.SDS.DNSACME.BUILD = 119;
+SYNO.SDS.DNSACME.BUILD = 120;
 
-// DSM's protected package-app route is the CGI trust boundary; this same-origin
-// URL does not implement separate browser authentication.
+// Every API call explicitly verifies the DSM session, admin role and CSRF.
+// Browser authorization remains separate from the certificate deployment login.
 SYNO.SDS.DNSACME.API = "/webman/3rdparty/dnsacme/api.cgi";
 
 // I18N_CATALOG_START
@@ -419,9 +419,19 @@ SYNO.SDS.DNSACME.injectCss = function () {
 
 // Thin AJAX wrapper around the CGI's {success,data,error} envelope.
 SYNO.SDS.DNSACME.request = function (action, method, data, cb, scope) {
+  var api = SYNO.SDS.DNSACME;
+  if (api.csrfToken) { api.sendRequest(action, method, data, cb, scope); return; }
+  api.sendRequest("csrf", "GET", null, function (ok, result) {
+    if (!ok) { cb.call(scope, false, result); return; }
+    api.csrfToken = result.csrfToken;
+    api.sendRequest(action, method, data, cb, scope);
+  });
+};
+SYNO.SDS.DNSACME.sendRequest = function (action, method, data, cb, scope) {
   Ext.Ajax.request({
     url: SYNO.SDS.DNSACME.API + "?action=" + encodeURIComponent(action),
     method: method || "GET",
+    headers: { "X-DNSACME-CSRF": SYNO.SDS.DNSACME.csrfToken || "" },
     jsonData: method === "POST" ? (data || {}) : undefined,
     // Exceed the Go operation context (20 minutes) so the CGI can return a
     // definitive envelope before the transport-level reconciliation path runs.
@@ -441,6 +451,7 @@ SYNO.SDS.DNSACME.request = function (action, method, data, cb, scope) {
       cb.call(scope, true, body.data);
     },
     failure: function (response) {
+      if (response.status === 401 || response.status === 403) { SYNO.SDS.DNSACME.csrfToken = null; }
       var body;
       try {
         body = response.responseText ? Ext.decode(response.responseText) : null;

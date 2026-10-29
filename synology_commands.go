@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"crypto/hmac"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -79,10 +80,17 @@ type cgiEnv func(string) string
 
 // serveSynologyCGI adapts DSM's same-origin CGI environment to a small JSON API.
 // Read operations accept GET, while configuration writes and ACME operations
-// require a mutating HTTP method so opening an app URL cannot change state. DSM's
-// package-app access control is the authentication, authorization, and CSRF
-// boundary; this internal CGI does not implement a second session protocol.
+// require a mutating HTTP method. Direct package URLs are not protected by the
+// DSM launcher, so every dispatch verifies the browser session and administrator.
 func serveSynologyCGI(ctx context.Context, configPath string, getenv cgiEnv, input io.Reader, output io.Writer) error {
+	return serveSynologyCGIWithAuth(ctx, configPath, getenv, input, output, nativeSynologyBrowserAuth())
+}
+
+func serveSynologyCGIWithAuth(ctx context.Context, configPath string, getenv cgiEnv, input io.Reader, output io.Writer, auth synologyBrowserAuth) error {
+	name, sid, authStatus, authErr := auth.verify(ctx, getenv)
+	if authErr != nil {
+		return writeCGIJSON(output, authStatus, nil, authErr)
+	}
 	method := getenv("REQUEST_METHOD")
 	if method == "" {
 		method = http.MethodGet
@@ -91,6 +99,22 @@ func serveSynologyCGI(ctx context.Context, configPath string, getenv cgiEnv, inp
 	action := values.Get("action")
 	if action == "" {
 		action = strings.TrimPrefix(getenv("PATH_INFO"), "/")
+	}
+	token, tokenErr := synologyBrowserCSRF(configPath, name, sid)
+	if tokenErr != nil {
+		return writeCGIJSON(output, http.StatusServiceUnavailable, nil, tokenErr)
+	}
+	if action == "csrf" && method == http.MethodGet {
+		return writeCGIJSON(output, http.StatusOK, map[string]string{"csrfToken": token}, nil)
+	}
+	if !hmac.Equal([]byte(getenv("HTTP_X_DNSACME_CSRF")), []byte(token)) {
+		return writeCGIJSON(output, http.StatusForbidden, nil, errors.New("browser session verification required; reopen DNSACME"))
+	}
+	if method != http.MethodGet {
+		contentType := strings.TrimSpace(strings.Split(getenv("CONTENT_TYPE"), ";")[0])
+		if !strings.EqualFold(contentType, "application/json") {
+			return writeCGIJSON(output, http.StatusUnsupportedMediaType, nil, errors.New("application/json required"))
+		}
 	}
 
 	status := http.StatusOK
@@ -381,6 +405,7 @@ func writeCGIJSON(output io.Writer, status int, payload any, err error) error {
 	}
 	fmt.Fprintf(output, "Status: %d %s\r\n", status, http.StatusText(status))
 	fmt.Fprint(output, "Content-Type: application/json; charset=utf-8\r\n")
+	fmt.Fprint(output, "X-Content-Type-Options: nosniff\r\n")
 	fmt.Fprint(output, "Cache-Control: no-store\r\n\r\n")
 	_, writeErr := output.Write(data)
 	return writeErr

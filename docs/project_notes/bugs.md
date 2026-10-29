@@ -2,6 +2,13 @@
 
 Resolved bugs and their prevention notes are recorded here.
 
+### 2026-10-29 - Direct package CGI requests bypassed browser authorization
+
+- **Issue**: Direct configuration requests returned redacted state and an edit token without a DSM browser session.
+- **Root Cause**: Launcher visibility was incorrectly assumed to protect package CGI URLs.
+- **Solution**: Verify the active session using DSM authenticate.cgi, require actual administrator group membership, and require a package HMAC CSRF token bound to the verified user/session. The bootstrap is authenticated, same-origin and uncached. Require JSON for mutations. Keep browser authorization separate from unattended deployment authentication.
+- **Prevention**: Denial matrix covers every action, method and PATH_INFO alias before body reads. Cover forged identity, duplicate cookies, non-admin, missing/wrong token, unavailable verifier, session binding and concurrent bootstrap. Live native-helper bootstrap, authenticated read, bad CSRF and anonymous rejection passed on DSM 7.3.2 as the package user.
+
 ## Entry Format
 
 ### YYYY-MM-DD - Brief description
