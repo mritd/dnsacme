@@ -45,3 +45,10 @@ Resolved bugs and their prevention notes are recorded here.
 - **Root Cause**: Login sent no OTP and did not retain a DSM trusted-device credential.
 - **Solution**: Add explicit OTP enrollment and reuse the returned device credential from private operational state. Freeze unattended retries after terminal authentication failures and expose recovery through the DSM sign-in action.
 - **Prevention**: Cover enrollment, credential reuse/redaction, revoked trust, pending imports and configuration conflicts in tests. Verify the real DSM protocol on-device; enrollment, OTP-free reuse and production import passed on DSM 7.3.2.
+
+### 2026-10-29 - DSM sign-in appeared outside connection setup and lacked clear cancellation
+
+- **Issue**: The sign-in action occupied the wizard footer and opened an unstyled Ext window with no explicit Cancel action.
+- **Root Cause**: The authentication UI was implemented as a global toolbar action and a separate generic window instead of part of the account connection flow.
+- **Solution**: Put sign-in below the account/password fields in Auto Update, with an inline form, local progress/error feedback, Cancel, a labeled close button and Escape. The running view opens a separate DSM connection card without reconfiguration.
+- **Prevention**: Exercise button placement, cancellation, cleared transient input, keyboard dismissal, retry after failure, late responses and unchanged deployed configuration in the Node-backed behavior test. Exclude transient authentication fields from wizard validation and dirty-state tracking.
