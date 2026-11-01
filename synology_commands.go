@@ -204,6 +204,9 @@ func cgiConfig(method, configPath string, input io.Reader) (any, error) {
 		// secret means "keep the persisted value" rather than erase credentials.
 		next = mergeSecrets(next, *current)
 		next = normalizeSynologyConfig(next)
+		if err := validateSynologyDNSCredentials(next.DNS, next.ACME.Domains); err != nil {
+			return false, err
+		}
 		if err := normalizeManualAcmeDNSConfig(&next.DNS); err != nil {
 			return false, err
 		}

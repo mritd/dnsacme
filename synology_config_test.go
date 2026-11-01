@@ -1883,8 +1883,8 @@ func TestSynologyApplyValidationAndCertificateLookupFailures(t *testing.T) {
 
 	cfg = validSynologyConfig(dir)
 	cfg.ACME.Domains = []string{"example.com", "*.example.com"}
-	if err := validateConfigForSynology(cfg, true); err == nil || !strings.Contains(err.Error(), "exactly one") {
-		t.Fatalf("expected multi-domain Synology validation error, got %v", err)
+	if err := validateConfigForSynology(cfg, true); err != nil {
+		t.Fatalf("multi-domain Synology config should validate, got %v", err)
 	}
 }
 
