@@ -76,7 +76,7 @@ func runSynologyTestForEditToken(ctx context.Context, configPath, expectedEditTo
 	}
 
 	appendSynologyLog(cfg, "checking DSM login")
-	if err := verifySynologyLogin(ctx, cfg.Synology); err != nil {
+	if err := verifySynologyConfiguredLogin(ctx, configPath, cfg); err != nil {
 		if current, _, saveErr := recordSynologyTestState(configPath, startingHash, startingEditToken, SynologyOperationState{Success: false, At: time.Now(), ConfigHash: startingHash, Message: "DSM login failed: " + err.Error()}); saveErr == nil {
 			starting = current
 		}
@@ -163,7 +163,7 @@ func runSynologyApplyForEditToken(ctx context.Context, configPath, expectedEditT
 		return newSynologyTaskResult(starting, "failed"), err
 	}
 	appendSynologyLog(cfg, "checking DSM login")
-	if err := verifySynologyLogin(ctx, cfg.Synology); err != nil {
+	if err := verifySynologyConfiguredLogin(ctx, configPath, cfg); err != nil {
 		if current, _, saveErr := recordSynologyApplyState(configPath, startingHash, startingEditToken, SynologyOperationState{Success: false, At: time.Now(), ConfigHash: startingHash, Message: "DSM login failed: " + err.Error()}, false); saveErr == nil {
 			starting = current
 		}
@@ -226,7 +226,7 @@ func runSynologyApplyForEditToken(ctx context.Context, configPath, expectedEditT
 			return newSynologyTaskResult(starting, "failed"), err
 		}
 	}
-	if err := deploySynologyStoredCertificate(ctx, cfg, cfg.ACME.Domains[0], keyPath, certPath); err != nil {
+	if err := deploySynologyStoredCertificate(ctx, cfg, cfg.ACME.Domains[0], keyPath, certPath, configPath); err != nil {
 		if current, _, saveErr := recordSynologyApplyState(configPath, startingHash, startingEditToken, SynologyOperationState{Success: false, At: time.Now(), ConfigHash: startingHash, Message: err.Error()}, false); saveErr == nil {
 			starting = current
 		}
@@ -297,7 +297,8 @@ func runSynologyDaemon(ctx context.Context, configPath string) error {
 		// The hook must resolve certificates from the runtime the manager actually
 		// uses, never a hardcoded storage path, or a renewed certificate might not
 		// be found for DSM import.
-		runtime.EventHook = synologyRenewalDeployHook(cfg, runtime.StorageDir)
+		maintainSynologyAuthentication(ctx, configPath, cfg)
+		runtime.EventHook = synologyRenewalDeployHook(cfg, runtime.StorageDir, configPath)
 		managerCtx, cancelManager := context.WithCancel(ctx)
 		stop, err := startACMEManagement(managerCtx, &runtime, false)
 		if err != nil {
@@ -341,6 +342,7 @@ func monitorSynologyConfigChange(ctx context.Context, configPath, activeKey stri
 			if cfg.Reconfiguring || cfg.RenewalRuntimeKey() != activeKey || !cfg.CanRenew() {
 				return true
 			}
+			maintainSynologyAuthentication(ctx, configPath, cfg)
 		}
 	}
 }
@@ -400,7 +402,7 @@ func validateConfigForSynology(cfg SynologyConfig, requireDeploy bool) error {
 // Import errors are logged and returned, but CertMagic treats cert_obtained as a
 // post event and may already have committed certificate storage when deployment
 // fails.
-func synologyRenewalDeployHook(cfg SynologyConfig, storageDir string) func(context.Context, string, map[string]any) error {
+func synologyRenewalDeployHook(cfg SynologyConfig, storageDir string, configPaths ...string) func(context.Context, string, map[string]any) error {
 	return func(ctx context.Context, event string, data map[string]any) error {
 		if event != "cert_obtained" {
 			return nil
@@ -414,7 +416,7 @@ func synologyRenewalDeployHook(cfg SynologyConfig, storageDir string) func(conte
 			appendSynologyLog(cfg, "renewal certificate lookup failed: "+err.Error())
 			return err
 		}
-		if err := deploySynologyStoredCertificate(ctx, cfg, identifier, keyPath, certPath); err != nil {
+		if err := deploySynologyStoredCertificate(ctx, cfg, identifier, keyPath, certPath, configPaths...); err != nil {
 			return err
 		}
 		return nil
@@ -428,9 +430,17 @@ func firstSynologyIdentifier(cfg SynologyConfig) string {
 	return cfg.ACME.Domains[0]
 }
 
-func deploySynologyStoredCertificate(ctx context.Context, cfg SynologyConfig, identifier, keyPath, certPath string) error {
+func deploySynologyStoredCertificate(ctx context.Context, cfg SynologyConfig, identifier, keyPath, certPath string, configPaths ...string) error {
 	appendSynologyLog(cfg, "importing certificate into Synology DSM for "+identifier)
-	if err := deploySynologyCertificate(ctx, cfg.Synology, keyPath, certPath); err != nil {
+	var err error
+	if len(configPaths) == 0 {
+		err = deploySynologyCertificate(ctx, cfg.Synology, keyPath, certPath)
+	} else {
+		err = runSynologyDSMOperation(ctx, configPaths[0], cfg, "", "", false, func(client *synologyAPIClient) error {
+			return client.importCertificateFiles(ctx, cfg.Synology, keyPath, certPath)
+		})
+	}
+	if err != nil {
 		appendSynologyLog(cfg, "Synology DSM import failed: "+err.Error())
 		return err
 	}

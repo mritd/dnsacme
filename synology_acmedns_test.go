@@ -83,7 +83,7 @@ func TestCGIAcmeDNSRegister_DoesNotWaitForRequestEOF(t *testing.T) {
 	done := make(chan error, 1)
 	go func() {
 		defer func() { _ = cgi.Close() }()
-		done <- serveSynologyCGI(
+		done <- serveTestSynologyCGI(
 			context.Background(),
 			filepath.Join(t.TempDir(), "config.yaml"),
 			queryEnv("action=acmedns-register", http.MethodPost),
@@ -261,7 +261,7 @@ func TestCGIAcmeDNSRegister_MethodAndTimeout(t *testing.T) {
 		t.Fatal("GET unexpectedly succeeded")
 	}
 	var output bytes.Buffer
-	if err := serveSynologyCGI(context.Background(), path, queryEnv("action=acmedns-register", http.MethodGet), strings.NewReader(`{}`), &output); err != nil {
+	if err := serveTestSynologyCGI(context.Background(), path, queryEnv("action=acmedns-register", http.MethodGet), strings.NewReader(`{}`), &output); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.HasPrefix(output.String(), "Status: 405 ") {

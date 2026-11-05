@@ -95,6 +95,9 @@ type SynologyDNSConfig struct {
 // SynologyDeployConfig identifies a DSM API endpoint and import behavior. HTTP
 // transports the DSM password in cleartext and should be limited to loopback.
 type SynologyDeployConfig struct {
+	// Loaded from the private authentication state, never from browser config.
+	DeviceID        string `json:"-" yaml:"-"`
+	DeviceName      string `json:"-" yaml:"-"`
 	Scheme          string `json:"scheme" yaml:"scheme"`
 	Host            string `json:"host" yaml:"host"`
 	Port            int    `json:"port" yaml:"port"`
