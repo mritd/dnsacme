@@ -149,27 +149,39 @@ func validateAcmeDNSRegistrationAccount(account *acmeDNSRegistrationAccount) err
 // same contract as remote registration. This keeps crafted CGI saves from
 // persisting unusable delegated-CNAME credentials.
 func normalizeManualAcmeDNSConfig(dns *SynologyDNSConfig) error {
-	if dns.Provider != provider.AcmeDNS {
+	if err := normalizeManualAcmeDNSAccount(dns.Provider, dns.Config); err != nil {
+		return err
+	}
+	for _, credential := range dns.Credentials {
+		if err := normalizeManualAcmeDNSAccount(credential.Provider, credential.Config); err != nil {
+			return fmt.Errorf("DNS credential %s: %w", credential.Name, err)
+		}
+	}
+	return nil
+}
+
+func normalizeManualAcmeDNSAccount(providerName string, config map[string]string) error {
+	if providerName != provider.AcmeDNS {
 		return nil
 	}
 	account := acmeDNSRegistrationAccount{
-		Username:   dns.Config[provider.AcmeDNSUsername],
-		Password:   dns.Config[provider.AcmeDNSPassword],
-		Subdomain:  dns.Config[provider.AcmeDNSSubdomain],
-		FullDomain: dns.Config[provider.AcmeDNSFullDomain],
+		Username:   config[provider.AcmeDNSUsername],
+		Password:   config[provider.AcmeDNSPassword],
+		Subdomain:  config[provider.AcmeDNSSubdomain],
+		FullDomain: config[provider.AcmeDNSFullDomain],
 	}
 	if err := validateAcmeDNSRegistrationAccount(&account); err != nil {
 		return err
 	}
-	serverURL, err := provider.NormalizeAcmeDNSServerURL(dns.Config[provider.AcmeDNSServerURL])
+	serverURL, err := provider.NormalizeAcmeDNSServerURL(config[provider.AcmeDNSServerURL])
 	if err != nil {
 		return err
 	}
-	dns.Config[provider.AcmeDNSUsername] = account.Username
-	dns.Config[provider.AcmeDNSPassword] = account.Password
-	dns.Config[provider.AcmeDNSSubdomain] = account.Subdomain
-	dns.Config[provider.AcmeDNSFullDomain] = account.FullDomain
-	dns.Config[provider.AcmeDNSServerURL] = serverURL
+	config[provider.AcmeDNSUsername] = account.Username
+	config[provider.AcmeDNSPassword] = account.Password
+	config[provider.AcmeDNSSubdomain] = account.Subdomain
+	config[provider.AcmeDNSFullDomain] = account.FullDomain
+	config[provider.AcmeDNSServerURL] = serverURL
 	return nil
 }
 

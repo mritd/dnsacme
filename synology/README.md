@@ -13,6 +13,22 @@ The package intentionally uses DSM's classic package app integration:
 - `spk/scripts/start-stop-status` runs the long-lived renewal process and reloads
   CertMagic when a newly applied configuration changes the persisted hash.
 
+## Multiple domains and DNS credentials
+
+The wizard accepts several domains (one per line) and several named DNS
+provider credentials. The "Domain Mapping" step assigns each domain to the
+credential that solves its DNS-01 challenge, so names hosted at different
+providers or accounts can share one package configuration.
+
+- CertMagic manages one certificate per domain, and each is imported into DSM
+  as its own certificate named `<description> <domain>`. With a single domain
+  the description is used unchanged, preserving existing DSM certificates.
+- Only the first domain may replace DSM's default certificate.
+- A domain and its wildcard (`example.com` and `*.example.com`) publish the same
+  `_acme-challenge` record and must use the same credential.
+- A configuration with one credential is stored in the original single-provider
+  shape (`dns.provider` / `dns.config`), so upgrades keep the applied state.
+
 Build a package from the repository root:
 
 ```sh

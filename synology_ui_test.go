@@ -710,7 +710,7 @@ func TestSynologyUIAcmeDNSRegistrationSurvivesProviderSwitch(t *testing.T) {
 		t.Fatal(err)
 	}
 	source := string(data)
-	start := strings.Index(source, "  hydrateAcmeDNSAccount: function (account, server) {")
+	start := strings.Index(source, "  hydrateAcmeDNSAccount: function (account, server, credential) {")
 	end := strings.Index(source[start:], "\n\n  // Mask the whole panel")
 	if start < 0 || end < 0 {
 		t.Fatal("ACME-DNS account hydration block not found")
@@ -765,20 +765,27 @@ func TestSynologyUIProviderDraftsOwnSelectedConfigCollection(t *testing.T) {
 	}
 	collect := source[collectStart : collectStart+collectEnd]
 	for _, marker := range []string{
-		"me.captureProviderDraft();",
-		"var selectedProvider = me.fProvider.getValue();",
-		"var selectedDraft = me.providerDrafts[selectedProvider] || { config: {} };",
+		// Stashing captures the visible provider draft into the active credential.
+		"me.stashActiveCredential();",
+		"credentials.push(me.credentialPayload(cred));",
+		"dns: { provider: primary.provider, config: primary.config, resolvers: primary.resolvers, credentials: credentials, assignments: assignments }",
+		"var selectedProvider = cred.provider;",
+		"var selectedDraft = cred.providerDrafts[selectedProvider] || { config: {} };",
 		"var dnsConfig = Ext.apply({}, selectedDraft.config || {});",
 		"if (selectedProvider === \"acmedns\") {",
 		"(selectedDraft.resolverText || \"\").split(\",\")",
-		"dns: { provider: selectedProvider, config: dnsConfig, resolvers: resolvers }",
 	} {
 		if !strings.Contains(collect, marker) {
-			t.Fatalf("collectConfig does not derive the request from the selected provider draft: %q", marker)
+			t.Fatalf("collectConfig does not derive the request from each credential's selected provider draft: %q", marker)
 		}
 	}
 	if strings.Contains(collect, "cfg.dns.config") {
 		t.Fatal("collectConfig falls back to a non-current provider config")
+	}
+	stashStart := strings.Index(source, "  stashActiveCredential: function () {")
+	stashEnd := strings.Index(source[stashStart:], "\n\n  showCredential:")
+	if stashStart < 0 || stashEnd < 0 || !strings.Contains(source[stashStart:stashStart+stashEnd], "me.captureProviderDraft();") {
+		t.Fatal("stashActiveCredential does not capture the visible provider draft")
 	}
 
 	renderStart := strings.Index(source, "  renderProviderFields: function () {")
@@ -787,7 +794,7 @@ func TestSynologyUIProviderDraftsOwnSelectedConfigCollection(t *testing.T) {
 		t.Fatal("renderProviderFields block not found")
 	}
 	render := source[renderStart : renderStart+renderEnd]
-	configuredProvider := strings.Index(render, "var configuredProvider = me.cfg && me.cfg.dns && me.cfg.dns.provider;")
+	configuredProvider := strings.Index(render, "var configuredProvider = me.isPrimaryCredentialActive() && me.cfg && me.cfg.dns && me.cfg.dns.provider;")
 	persistedFallback := strings.Index(render, "configuredProvider === prov.name && me.cfg.dns.config && me.cfg.dns.config[f.key]")
 	if configuredProvider < 0 || persistedFallback < 0 || configuredProvider > persistedFallback {
 		t.Fatal("provider fields may hydrate an unselected provider from the configured provider's persisted config")
@@ -970,7 +977,7 @@ func TestSynologyUIAcmeDNSResolversRoundTrip(t *testing.T) {
 		`var resolverValue = acmeDNSDraft && acmeDNSDraft.resolverText !== undefined`,
 		`: (resolverValues.join(", ") || "1.1.1.1");`,
 		`fieldLabel: SYNO.SDS.DNSACME.t("field.acmeDNSResolvers") + "*"`,
-		`dns: { provider: selectedProvider, config: dnsConfig, resolvers: resolvers }`,
+		`return { name: cred.name, previousName: cred.previousName, provider: selectedProvider, config: dnsConfig, resolvers: resolvers };`,
 	} {
 		if !strings.Contains(source, marker) {
 			t.Fatalf("ACME-DNS resolver UI is missing %q", marker)
@@ -1115,7 +1122,7 @@ func TestSynologyUIAcmeDNSRegistrationFillsTheNormalForm(t *testing.T) {
 		`buttons: Ext.MessageBox.YESNO`,
 		`if (button === "yes") { me.registerAcmeDNS(server); }`,
 		`handler: me.confirmAcmeDNSRegistration`,
-		`me.hydrateAcmeDNSAccount(data, data.serverURL || server);`,
+		`me.hydrateAcmeDNSAccount(data, data.serverURL || server, credential);`,
 		`status.acmeDNSRegistered`,
 		`It will not be saved until you click Next.`,
 		`me.acmeDNSRegisterRow = new Ext.form.CompositeField({`,
@@ -1391,4 +1398,32 @@ func catalogKeys(t *testing.T, source, startMarker, endMarker string) map[string
 		keys[match[1]] = true
 	}
 	return keys
+}
+
+func TestSynologyUIMapsDomainsToNamedCredentials(t *testing.T) {
+	data, err := os.ReadFile("synology/spk/ui/DNSACME.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(data)
+	for _, marker := range []string{
+		`{ id: "assignments", text: SYNO.SDS.DNSACME.t("step.assignments") },`,
+		"me.cardItems = [me.buildCertificate(), me.buildDns(), me.buildAssignments(), me.buildSynology(), me.buildValidation()];",
+		"me.stepForms[2] = me.pAssignments;",
+		"me.stepForms[3] = form;",
+		"if (i === 2) { me.renderAssignmentFields(); }",
+		"if (i === 4) { me.startLogs();",
+		"me.loadCredentials(cfg);\n    me.renderAssignmentFields(true);",
+		`me.credentials.push(me.newCredential("default",`,
+		"me.markCredentialsSaved();",
+		"fieldLabel: Ext.util.Format.htmlEncode(domain)",
+		"/^[A-Za-z0-9._-]{1,64}$/",
+	} {
+		if !strings.Contains(source, marker) {
+			t.Fatalf("multi-credential UI is missing %q", marker)
+		}
+	}
+	if strings.Contains(source, "validation.singleDomain") {
+		t.Fatal("the single-domain restriction is still present in the UI")
+	}
 }

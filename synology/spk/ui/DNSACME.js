@@ -1,7 +1,7 @@
 Ext.ns("SYNO.SDS.DNSACME");
 
 // Source/package cache marker used to confirm that DSM loaded the rebuilt UI.
-SYNO.SDS.DNSACME.BUILD = 117;
+SYNO.SDS.DNSACME.BUILD = 118;
 
 // DSM's protected package-app route is the CGI trust boundary; this same-origin
 // URL does not implement separate browser authentication.
@@ -14,6 +14,7 @@ SYNO.SDS.DNSACME.I18N = {
   en: {
     "step.certificate": "Certificate",
     "step.dns": "DNS Provider",
+    "step.assignments": "Domain Mapping",
     "step.autoUpdate": "Auto Update",
     "step.validateApply": "Validate & Apply",
     "status.loadingConfig": "Loading configuration...",
@@ -23,24 +24,34 @@ SYNO.SDS.DNSACME.I18N = {
     "button.apply": "Apply",
     "button.reconfigure": "Reconfigure",
     "button.registerAcmeDNS": "Register account",
+    "button.addCredential": "Add",
+    "button.removeCredential": "Remove",
     "button.copy": "Copy",
     "button.ok": "OK",
     "status.saveBeforeForward": "Save the current step with Next before continuing",
     "status.fixFields": "Correct the highlighted fields",
     "status.ready": "Ready",
     "field.domain": "Domain",
-    "placeholder.domain": "example.com or *.example.com",
+    "placeholder.domain": "One per line, e.g. example.com or *.example.com",
     "field.email": "Email",
     "field.keyType": "Key type",
     "field.issuer": "Issuer",
     "title.certificate": "Certificate",
-    "subtitle.certificate": "Enter the domain and ACME account email",
-    "validation.singleDomain": "Synology DSM deployment supports one domain at a time",
+    "subtitle.certificate": "Enter one or more domains and the ACME account email",
     "validation.invalidDomain": "Invalid domain: {domain}",
-    "validation.domainRequired": "Enter one domain",
+    "validation.domainRequired": "Enter at least one domain",
     "field.provider": "Provider",
+    "field.credential": "Credential",
+    "field.credentialName": "Credential name",
+    "validation.credentialNameRequired": "Enter a credential name",
+    "validation.credentialNameDuplicate": "Credential names must be unique",
+    "validation.credentialNameInvalid": "Use up to 64 letters, digits, dots, dashes, or underscores",
     "title.dns": "DNS Provider",
-    "subtitle.dns": "Choose a DNS provider and enter credentials for DNS-01 validation",
+    "subtitle.dns": "Add one or more DNS provider credentials for DNS-01 validation",
+    "title.assignments": "Domain Mapping",
+    "subtitle.assignments": "Choose the DNS credential that validates each domain",
+    "hint.assignments": "Each domain is issued and imported into DSM as its own certificate. A domain and its wildcard (example.com and *.example.com) share one DNS challenge record and must use the same credential.",
+    "validation.sharedChallenge": "{domain} shares its DNS challenge record with another domain and must use the same credential",
     "field.dsmAccount": "DSM account",
     "placeholder.dsmAccount": "DSM administrator account",
     "field.dsmPassword": "DSM password",
@@ -48,6 +59,7 @@ SYNO.SDS.DNSACME.I18N = {
     "field.certificateDescription": "Certificate description",
     "option.createCertificate": "Create certificate if missing",
     "option.setDefault": "Set as default certificate",
+    "hint.multiDomainCertificate": "With several domains, each certificate is named \"<description> <domain>\" in DSM, and only the first domain can become the default certificate.",
     "field.host": "Host",
     "field.protocol": "Protocol",
     "field.port": "Port",
@@ -60,6 +72,7 @@ SYNO.SDS.DNSACME.I18N = {
     "title.running": "Auto Update Running",
     "summary.domain": "Domain",
     "summary.provider": "DNS Provider",
+    "summary.assignments": "Domain mapping",
     "summary.keyType": "Key type",
     "summary.issuer": "Issuer",
     "summary.lastApplied": "Last applied",
@@ -115,6 +128,7 @@ SYNO.SDS.DNSACME.I18N = {
   "zh-CN": {
     "step.certificate": "证书",
     "step.dns": "DNS 提供商",
+    "step.assignments": "域名映射",
     "step.autoUpdate": "自动更新",
     "step.validateApply": "验证并应用",
     "status.loadingConfig": "正在加载配置...",
@@ -124,24 +138,34 @@ SYNO.SDS.DNSACME.I18N = {
     "button.apply": "应用",
     "button.reconfigure": "重新配置",
     "button.registerAcmeDNS": "注册账户",
+    "button.addCredential": "添加",
+    "button.removeCredential": "删除",
     "button.copy": "复制",
     "button.ok": "确定",
     "status.saveBeforeForward": "请先点击'下一步'保存当前步骤",
     "status.fixFields": "请修正标红的字段",
     "status.ready": "就绪",
     "field.domain": "域名",
-    "placeholder.domain": "example.com 或 *.example.com",
+    "placeholder.domain": "每行一个, 如 example.com 或 *.example.com",
     "field.email": "邮箱",
     "field.keyType": "密钥类型",
     "field.issuer": "颁发机构",
     "title.certificate": "证书信息",
-    "subtitle.certificate": "填写待申请的域名和 ACME 账户邮箱",
-    "validation.singleDomain": "Synology DSM 每次只能部署一个域名",
+    "subtitle.certificate": "填写一个或多个待申请的域名和 ACME 账户邮箱",
     "validation.invalidDomain": "无效域名: {domain}",
-    "validation.domainRequired": "请填写一个域名",
+    "validation.domainRequired": "请至少填写一个域名",
     "field.provider": "提供商",
+    "field.credential": "凭据",
+    "field.credentialName": "凭据名称",
+    "validation.credentialNameRequired": "请填写凭据名称",
+    "validation.credentialNameDuplicate": "凭据名称不能重复",
+    "validation.credentialNameInvalid": "最多 64 个字符, 仅可使用字母, 数字, 点, 短横线或下划线",
     "title.dns": "DNS 提供商",
-    "subtitle.dns": "选择 DNS 提供商并填写 DNS-01 验证凭据",
+    "subtitle.dns": "添加一个或多个用于 DNS-01 验证的 DNS 提供商凭据",
+    "title.assignments": "域名映射",
+    "subtitle.assignments": "为每个域名选择用于验证的 DNS 凭据",
+    "hint.assignments": "每个域名会单独签发证书并分别导入 DSM. 域名与其通配符 (example.com 和 *.example.com) 共用同一条 DNS 验证记录, 必须使用同一个凭据.",
+    "validation.sharedChallenge": "{domain} 与其他域名共用 DNS 验证记录, 必须使用同一个凭据",
     "field.dsmAccount": "DSM 账号",
     "placeholder.dsmAccount": "DSM 管理员账号",
     "field.dsmPassword": "DSM 密码",
@@ -149,6 +173,7 @@ SYNO.SDS.DNSACME.I18N = {
     "field.certificateDescription": "证书描述",
     "option.createCertificate": "不存在时创建证书",
     "option.setDefault": "设为默认证书",
+    "hint.multiDomainCertificate": "配置多个域名时, 每个证书在 DSM 中命名为 \"<描述> <域名>\", 且只有第一个域名可以设为默认证书.",
     "field.host": "主机",
     "field.protocol": "协议",
     "field.port": "端口",
@@ -161,6 +186,7 @@ SYNO.SDS.DNSACME.I18N = {
     "title.running": "自动更新运行中",
     "summary.domain": "域名",
     "summary.provider": "DNS 提供商",
+    "summary.assignments": "域名映射",
     "summary.keyType": "密钥类型",
     "summary.issuer": "颁发机构",
     "summary.lastApplied": "最近应用",
@@ -280,6 +306,12 @@ SYNO.SDS.DNSACME.injectCss = function () {
     ".dnsacme-acmedns-register-row .x-form-element { display:flex; align-items:center; }",
     ".dnsacme-acmedns-register-row { margin-left:-8px; }",
     ".dnsacme-acmedns-action { margin-left:8px; white-space:nowrap; }",
+    /* Credential selector row: combo plus Add/Remove buttons, aligned like the ACME-DNS register row. */
+    ".dnsacme-inline-row .x-form-element { display:flex; align-items:center; }",
+    ".dnsacme-inline-row { margin-left:-8px; }",
+    ".dnsacme-inline-action { margin-left:8px; white-space:nowrap; }",
+    /* Hints that belong to the whole form, indented to the input column. */
+    ".dnsacme-form-hint { margin:2px 0 12px 160px; max-width:380px; }",
     ".dnsacme-acmedns-cname { margin-top:8px; padding-top:10px; border-top:1px solid #d7e0ea; }",
     ".dnsacme-acmedns-cname-row { display:flex; align-items:flex-start; gap:8px; margin-top:8px; color:#414b54; font-size:12px; line-height:1.45; }",
     ".dnsacme-acmedns-cname-label { flex:0 0 44px; color:#6f7b86; }",
@@ -458,6 +490,13 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
     me.providerFields = [];
     me.providerDrafts = {};
     me.renderedProviderName = null;
+    // Each credential owns its provider drafts; me.providerDrafts always points
+    // at the drafts of the credential shown on the DNS step.
+    me.credentials = [];
+    me.activeCredentialId = null;
+    me.credentialSeq = 0;
+    me.assignments = {};
+    me.assignmentFields = [];
     me._closed = false;
 
     SYNO.SDS.DNSACME.injectCss();
@@ -532,6 +571,7 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
   STEPS: [
     { id: "certificate", text: SYNO.SDS.DNSACME.t("step.certificate") },
     { id: "dns", text: SYNO.SDS.DNSACME.t("step.dns") },
+    { id: "assignments", text: SYNO.SDS.DNSACME.t("step.assignments") },
     { id: "synology", text: SYNO.SDS.DNSACME.t("step.autoUpdate") },
     { id: "validation", text: SYNO.SDS.DNSACME.t("step.validateApply") }
   ],
@@ -548,7 +588,7 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
     me.forceWizard = false;
     me.stepForms = [];
 
-    me.cardItems = [me.buildCertificate(), me.buildDns(), me.buildSynology(), me.buildValidation()];
+    me.cardItems = [me.buildCertificate(), me.buildDns(), me.buildAssignments(), me.buildSynology(), me.buildValidation()];
     me.deployedCard = me.buildDeployed();
     me.cards = new Ext.Panel({
       region: "center", layout: "card", activeItem: 0, border: false,
@@ -604,7 +644,9 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
   },
 
   isCurrentStepDirty: function () {
-    var dirty = false;
+    // Adding, removing, or renaming a credential is not a field edit, but it
+    // still has to be saved with Next before later steps can rely on it.
+    var dirty = this.step === 1 && !!this._credentialsChanged;
     this.eachContainerField(this.stepForms[this.step], function (f) {
       if (f.isDirty && f.isDirty()) { dirty = true; }
     });
@@ -614,6 +656,7 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
   markStepClean: function (idx) {
     var form = this.stepForms[idx];
     if (!form) { return; }
+    if (idx === 1) { this._credentialsChanged = false; }
     this.eachContainerField(form, function (f) {
       if (f.getValue) { f.originalValue = f.getValue(); }
     });
@@ -652,7 +695,10 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
 
   showStep: function (i) {
     var me = this;
-    if (i < 0 || i > 3) { return; }
+    if (i < 0 || i > 4) { return; }
+    // The mapping step lists the domains entered on the first step, so rebuild
+    // it whenever it becomes visible.
+    if (i === 2) { me.renderAssignmentFields(); }
     me.step = i;
     me.cards.getLayout().setActiveItem(me.cardItems[i]);
     me.renderStepper();
@@ -660,7 +706,7 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
     // A card layout hides inactive items, so a card that was never shown at the
     // current window size carries a stale column width until it becomes active.
     me.fitContentColumn();
-    if (i === 3) { me.startLogs(); me.fitLogHeight.defer(1, me); } else { me.stopLogs(); }
+    if (i === 4) { me.startLogs(); me.fitLogHeight.defer(1, me); } else { me.stopLogs(); }
   },
 
   syncBar: function () {
@@ -674,9 +720,9 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
       return;
     }
     me.prevBtn.setVisible(i > 0);
-    me.nextBtn.setVisible(i < 3);
-    me.testBtn.setVisible(i === 3);
-    me.applyBtn.setVisible(i === 3);
+    me.nextBtn.setVisible(i < 4);
+    me.testBtn.setVisible(i === 4);
+    me.applyBtn.setVisible(i === 4);
     me.reconfigBtn.hide();
   },
 
@@ -749,7 +795,7 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
     // ExtJS validates hidden fields too, so a failure inside the collapsed
     // advanced panel would otherwise refuse Next with no visible red field.
     // Expand the panel so the invalid control (and its error icon) is on screen.
-    if (!ok && me.advPanel && me.advCollapsed && form === me.stepForms[2]) {
+    if (!ok && me.advPanel && me.advCollapsed && form === me.stepForms[3]) {
       var advInvalid = false;
       me.eachContainerField(me.advPanel, function (f) {
         if (f.isValid && f.isValid(true) === false) { advInvalid = true; }
@@ -964,13 +1010,16 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
   },
 
   visibleLogArea: function () {
-    return this.deployedMode ? this.deployedLogsArea : (this.step === 3 ? this.logsArea : null);
+    return this.deployedMode ? this.deployedLogsArea : (this.step === 4 ? this.logsArea : null);
   },
 
   buildCertificate: function () {
     var me = this;
-    me.fDomains = new SYNO.ux.TextField({
-      fieldLabel: SYNO.SDS.DNSACME.t("field.domain"), width: 380, allowBlank: false,
+    // DSM ships SYNO.ux.TextArea; fall back to the stock ExtJS control so an
+    // older DSM build still renders the multi-line domain list.
+    var DomainArea = SYNO.ux.TextArea || Ext.form.TextArea;
+    me.fDomains = new DomainArea({
+      fieldLabel: SYNO.SDS.DNSACME.t("field.domain"), width: 380, height: 88, allowBlank: false,
       emptyText: SYNO.SDS.DNSACME.t("placeholder.domain"), validator: me.validateDomains
     });
     me.liveValidateField(me.fDomains);
@@ -998,22 +1047,281 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
       var d = Ext.util.Format.trim(lines[i]);
       if (!d) { continue; }
       count++;
-      if (count > 1) { return SYNO.SDS.DNSACME.t("validation.singleDomain"); }
       if (!re.test(d)) { return SYNO.SDS.DNSACME.t("validation.invalidDomain", { domain: d }); }
     }
-    return count === 1 ? true : SYNO.SDS.DNSACME.t("validation.domainRequired");
+    return count > 0 ? true : SYNO.SDS.DNSACME.t("validation.domainRequired");
   },
 
   buildDns: function () {
     var me = this;
+    // The credential selector edits one named provider account at a time; the
+    // provider combo and its dynamic fields below always belong to it.
+    me.fCredential = SYNO.SDS.DNSACME.combo({ hideLabel: true, width: 190 }, []);
+    me.fCredential.on("select", function (combo, record) { me.selectCredential(record.get("v")); }, me);
+    me.addCredentialBtn = new SYNO.ux.Button({
+      text: SYNO.SDS.DNSACME.t("button.addCredential"), cls: "dnsacme-inline-action", handler: me.addCredential, scope: me
+    });
+    me.removeCredentialBtn = new SYNO.ux.Button({
+      text: SYNO.SDS.DNSACME.t("button.removeCredential"), cls: "dnsacme-inline-action", handler: me.removeCredential, scope: me
+    });
+    me.credentialRow = new Ext.form.CompositeField({
+      fieldLabel: SYNO.SDS.DNSACME.t("field.credential"),
+      cls: "dnsacme-inline-row",
+      width: 380,
+      items: [me.fCredential, me.addCredentialBtn, me.removeCredentialBtn]
+    });
+    me.fCredentialName = new SYNO.ux.TextField({
+      fieldLabel: SYNO.SDS.DNSACME.t("field.credentialName") + "*", width: 380, allowBlank: false,
+      validator: function (value) { return me.validateCredentialName(value); }
+    });
+    me.liveValidateField(me.fCredentialName);
+    me.fCredentialName.on("change", me.stashActiveCredential, me);
     me.fProvider = SYNO.SDS.DNSACME.combo({ fieldLabel: SYNO.SDS.DNSACME.t("field.provider"), width: 380 }, []);
     me.fProvider.on("select", me.renderProviderFields, me);
-    me.pDns = me.formPanel("dns", [me.fProvider], {
+    me.pDns = me.formPanel("dns", [me.credentialRow, me.fCredentialName, me.fProvider], {
       cls: "dnsacme-dns-form", labelWidth: 160,
       title: SYNO.SDS.DNSACME.t("title.dns"), subtitle: SYNO.SDS.DNSACME.t("subtitle.dns")
     });
     me.stepForms[1] = me.pDns;
     return me.pDns;
+  },
+
+  credentialById: function (id) {
+    var found = null;
+    Ext.each(this.credentials, function (cred) { if (cred.id === id) { found = cred; } });
+    return found;
+  },
+
+  activeCredentialEntry: function () {
+    return this.credentialById(this.activeCredentialId);
+  },
+
+  primaryCredentialName: function () {
+    return this.credentials.length ? this.credentials[0].name : "";
+  },
+
+  newCredential: function (name, provider, config, resolvers, previousName) {
+    var drafts = {};
+    if (provider) {
+      drafts[provider] = { config: Ext.apply({}, config || {}) };
+      if (provider === "acmedns") { drafts[provider].resolverText = (resolvers || []).join(", "); }
+    }
+    this.credentialSeq += 1;
+    return {
+      id: "credential-" + this.credentialSeq,
+      name: name,
+      previousName: previousName || "",
+      provider: provider,
+      resolvers: resolvers || [],
+      providerDrafts: drafts
+    };
+  },
+
+  // loadCredentials presents a legacy single-provider config as one credential
+  // named "default", the same name the server uses when merging its secrets.
+  loadCredentials: function (cfg) {
+    var me = this;
+    var dns = cfg.dns || {};
+    me.credentials = [];
+    me.credentialSeq = 0;
+    if (dns.credentials && dns.credentials.length) {
+      Ext.each(dns.credentials, function (c) {
+        me.credentials.push(me.newCredential(c.name, c.provider, c.config, c.resolvers, c.name));
+      });
+    } else {
+      me.credentials.push(me.newCredential("default", dns.provider || (me.providers[0] && me.providers[0].name), dns.config, dns.resolvers, "default"));
+    }
+    me.assignments = Ext.apply({}, dns.assignments || {});
+    me._credentialsChanged = false;
+    me.activeCredentialId = null;
+    me.loadedPrimaryId = me.credentials[0].id;
+    me.showCredential(me.credentials[0]);
+  },
+
+  // stashActiveCredential copies the visible DNS fields into the active
+  // credential and follows a rename through the domain assignments.
+  stashActiveCredential: function () {
+    var me = this;
+    var cred = me.activeCredentialEntry();
+    if (!cred) { return; }
+    me.captureProviderDraft();
+    cred.provider = me.fProvider.getValue();
+    var name = Ext.util.Format.trim(me.fCredentialName.getValue() || "");
+    // A duplicate name stays in the field with its validation error until the
+    // user fixes it, so assignments never point at two credentials at once.
+    if (name && name !== cred.name && me.validateCredentialName(name) === true) {
+      for (var domain in me.assignments) {
+        if (Object.prototype.hasOwnProperty.call(me.assignments, domain) && me.assignments[domain] === cred.name) {
+          me.assignments[domain] = name;
+        }
+      }
+      cred.name = name;
+      me._credentialsChanged = true;
+      me.refreshCredentialCombo();
+    }
+  },
+
+  showCredential: function (cred) {
+    var me = this;
+    me.activeCredentialId = cred.id;
+    me.providerDrafts = cred.providerDrafts;
+    me.renderedProviderName = null;
+    me.fCredentialName.setValue(cred.name);
+    me.fCredentialName.originalValue = cred.name;
+    me.refreshCredentialCombo();
+    me._skipProviderDraftCapture = true;
+    try {
+      me.fProvider.setValue(cred.provider || (me.providers[0] && me.providers[0].name));
+      me.renderProviderFields();
+    } finally {
+      me._skipProviderDraftCapture = false;
+    }
+    me.removeCredentialBtn.setDisabled(me.credentials.length < 2);
+  },
+
+  selectCredential: function (id) {
+    var cred = this.credentialById(id);
+    if (!cred || id === this.activeCredentialId) { return; }
+    // Unsaved edits leave with the hidden credential's fields, so remember them
+    // for the forward-navigation guard.
+    if (this.isCurrentStepDirty()) { this._credentialsChanged = true; }
+    this.stashActiveCredential();
+    this.showCredential(cred);
+  },
+
+  refreshCredentialCombo: function () {
+    var data = [];
+    Ext.each(this.credentials, function (cred) { data.push({ v: cred.id, t: cred.name }); });
+    this.fCredential.getStore().loadData(data);
+    this.fCredential.setValue(this.activeCredentialId);
+    this.fCredential.originalValue = this.activeCredentialId;
+  },
+
+  addCredential: function () {
+    var me = this;
+    me.stashActiveCredential();
+    var n = me.credentials.length + 1, name;
+    do { name = "dns-" + n; n += 1; } while (me.credentialNameTaken(name, null));
+    var cred = me.newCredential(name, me.providers[0] && me.providers[0].name, {}, [], "");
+    me.credentials.push(cred);
+    me._credentialsChanged = true;
+    me.showCredential(cred);
+  },
+
+  // removeCredential keeps at least one credential and moves domains that used
+  // the removed one to the first remaining credential.
+  removeCredential: function () {
+    var me = this;
+    if (me.credentials.length < 2) { return; }
+    var removed = me.activeCredentialEntry();
+    var remaining = [];
+    Ext.each(me.credentials, function (cred) { if (cred !== removed) { remaining.push(cred); } });
+    me.credentials = remaining;
+    var fallback = me.credentials[0].name;
+    for (var domain in me.assignments) {
+      if (Object.prototype.hasOwnProperty.call(me.assignments, domain) && me.assignments[domain] === removed.name) {
+        me.assignments[domain] = fallback;
+      }
+    }
+    me._credentialsChanged = true;
+    me.showCredential(me.credentials[0]);
+  },
+
+  credentialNameTaken: function (name, except) {
+    var taken = false;
+    Ext.each(this.credentials, function (cred) { if (cred !== except && cred.name === name) { taken = true; } });
+    return taken;
+  },
+
+  validateCredentialName: function (value) {
+    var name = Ext.util.Format.trim(value || "");
+    if (!name) { return SYNO.SDS.DNSACME.t("validation.credentialNameRequired"); }
+    // Names appear in combo lists that ExtJS renders as HTML; the server
+    // enforces the same character set.
+    if (!/^[A-Za-z0-9._-]{1,64}$/.test(name)) { return SYNO.SDS.DNSACME.t("validation.credentialNameInvalid"); }
+    if (this.credentialNameTaken(name, this.activeCredentialEntry())) { return SYNO.SDS.DNSACME.t("validation.credentialNameDuplicate"); }
+    return true;
+  },
+
+  domainList: function () {
+    var domains = [];
+    Ext.each((this.fDomains.getValue() || "").split(/\r?\n|,/), function (d) {
+      d = Ext.util.Format.trim(d);
+      if (d && domains.indexOf(d) < 0) { domains.push(d); }
+    });
+    return domains;
+  },
+
+  buildAssignments: function () {
+    var me = this;
+    me.assignmentsHint = new Ext.BoxComponent({
+      autoEl: { tag: "div", cls: "dnsacme-field-note dnsacme-form-hint", html: Ext.util.Format.htmlEncode(SYNO.SDS.DNSACME.t("hint.assignments")) }
+    });
+    me.pAssignments = me.formPanel("assignments", [me.assignmentsHint], {
+      cls: "dnsacme-dns-form", labelWidth: 160,
+      title: SYNO.SDS.DNSACME.t("title.assignments"), subtitle: SYNO.SDS.DNSACME.t("subtitle.assignments")
+    });
+    me.stepForms[2] = me.pAssignments;
+    return me.pAssignments;
+  },
+
+  captureAssignments: function () {
+    var me = this;
+    Ext.each(me.assignmentFields, function (field) {
+      if (field && !field.destroyed && field.getValue()) { me.assignments[field.dnsacmeDomain] = field.getValue(); }
+    });
+  },
+
+  // renderAssignmentFields shows one credential selector per domain. Domains
+  // without an assignment default to the first credential, as on the server.
+  renderAssignmentFields: function (skipCapture) {
+    var me = this;
+    var target = me.pAssignments.dnsacmeInner || me.pAssignments;
+    // A config load has just replaced me.assignments; the old selectors must
+    // not write their stale values back over it.
+    if (!skipCapture) {
+      me.stashActiveCredential();
+      me.captureAssignments();
+    }
+    Ext.each(me.assignmentFields, function (field) {
+      if (field && !field.destroyed && field.clearInvalid) { field.clearInvalid(); }
+      target.remove(field, true);
+    });
+    me.assignmentFields = [];
+    var pairs = [];
+    Ext.each(me.credentials, function (cred) { pairs.push([cred.name, cred.name]); });
+    Ext.each(me.domainList(), function (domain) {
+      var assigned = me.assignments[domain];
+      if (!assigned || !me.credentialNameTaken(assigned, null)) { assigned = me.primaryCredentialName(); }
+      var field = SYNO.SDS.DNSACME.combo({
+        fieldLabel: Ext.util.Format.htmlEncode(domain), width: 380, value: assigned, msgTarget: "qtip", labelStyle: "white-space:nowrap;",
+        validator: function (value) { return me.validateAssignment(domain, value); }
+      }, pairs);
+      field.dnsacmeDomain = domain;
+      field.on("select", function () { Ext.each(me.assignmentFields, function (f) { f.validate(); }); }, me);
+      me.assignmentFields.push(field);
+      target.add(field);
+      me.useTooltipValidation(field);
+      field.setValue(assigned);
+      field.originalValue = assigned;
+    });
+    if (me.pAssignments.rendered) {
+      target.doLayout();
+      me.pAssignments.doLayout();
+    }
+  },
+
+  // validateAssignment mirrors the server rule that example.com and
+  // *.example.com publish the same _acme-challenge record.
+  validateAssignment: function (domain, value) {
+    var key = domain.toLowerCase().replace(/^\*\./, "");
+    var conflict = false;
+    Ext.each(this.assignmentFields, function (field) {
+      if (field.dnsacmeDomain !== domain && field.dnsacmeDomain.toLowerCase().replace(/^\*\./, "") === key && field.getValue() !== value) {
+        conflict = true;
+      }
+    });
+    return conflict ? SYNO.SDS.DNSACME.t("validation.sharedChallenge", { domain: domain }) : true;
   },
 
   buildSynology: function () {
@@ -1067,10 +1375,13 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
     });
     me.advCollapsed = true;
 
-    var form = me.formPanel("synology", [me.fAccount, me.fPassword, me.fCertDesc, me.fCreate, me.fAsDefault, me.advToggle, me.advPanel], {
+    me.multiDomainHint = new Ext.BoxComponent({
+      autoEl: { tag: "div", cls: "dnsacme-field-note", html: Ext.util.Format.htmlEncode(SYNO.SDS.DNSACME.t("hint.multiDomainCertificate")) }
+    });
+    var form = me.formPanel("synology", [me.fAccount, me.fPassword, me.fCertDesc, me.fCreate, me.fAsDefault, me.multiDomainHint, me.advToggle, me.advPanel], {
       title: SYNO.SDS.DNSACME.t("title.autoUpdate"), subtitle: SYNO.SDS.DNSACME.t("subtitle.autoUpdate")
     });
-    me.stepForms[2] = form;
+    me.stepForms[3] = form;
     return form;
   },
 
@@ -1134,6 +1445,20 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
   updateDeployedSummary: function (cfg) {
     var domains = ((cfg.acme && cfg.acme.domains) || []).join(", ");
     var provider = (cfg.dns && cfg.dns.provider) || "";
+    var credentials = (cfg.dns && cfg.dns.credentials) || [];
+    var assignments = (cfg.dns && cfg.dns.assignments) || {};
+    var mapping = [];
+    if (credentials.length) {
+      var providerByName = {};
+      Ext.each(credentials, function (c) { providerByName[c.name] = c.provider; });
+      Ext.each((cfg.acme && cfg.acme.domains) || [], function (d) {
+        var name = assignments[d] || credentials[0].name;
+        mapping.push(d + " \u2192 " + name + " (" + (providerByName[name] || "-") + ")");
+      });
+      var providers = [];
+      Ext.each(credentials, function (c) { if (providers.indexOf(c.provider) < 0) { providers.push(c.provider); } });
+      provider = providers.join(", ");
+    }
     var keyType = (cfg.acme && cfg.acme.keyType) || "";
     var ca = (cfg.acme && cfg.acme.ca) || "";
     var lastApply = cfg.lastApply && cfg.lastApply.at ? new Date(cfg.lastApply.at).toLocaleString() : "";
@@ -1147,6 +1472,7 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
       '<div class="dnsacme-deployed-line"><span>' + SYNO.SDS.DNSACME.t("summary.keyType") + '</span><b>' + Ext.util.Format.htmlEncode(keyLabel || "-") + '</b></div>',
       '<div class="dnsacme-deployed-line"><span>' + SYNO.SDS.DNSACME.t("summary.issuer") + '</span><b>' + Ext.util.Format.htmlEncode(caLabel || "-") + '</b></div>',
       '<div class="dnsacme-deployed-line"><span>' + SYNO.SDS.DNSACME.t("summary.lastApplied") + '</span><b>' + Ext.util.Format.htmlEncode(lastApply || "-") + '</b></div>',
+      mapping.length ? '<div class="dnsacme-deployed-line"><span>' + SYNO.SDS.DNSACME.t("summary.assignments") + '</span><b>' + Ext.util.Format.htmlEncode(mapping.join(", ")) + '</b></div>' : '',
       '</div>'
     ].join("");
     if (this.deployedSummary.rendered) { this.deployedSummary.getEl().dom.innerHTML = html; } else { this.deployedSummary.autoEl.html = html; }
@@ -1196,7 +1522,9 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
       var draft = me.providerDrafts[prov.name];
       Ext.each(prov.fields, function (f) {
         var hasDraft = draft && draft.config && Object.prototype.hasOwnProperty.call(draft.config, f.key);
-        var configuredProvider = me.cfg && me.cfg.dns && me.cfg.dns.provider;
+        // The legacy fields mirror only the first credential, so they may seed
+        // fields for that credential and never for another account.
+        var configuredProvider = me.isPrimaryCredentialActive() && me.cfg && me.cfg.dns && me.cfg.dns.provider;
         var stored = hasDraft
           ? draft.config[f.key]
           : (configuredProvider === prov.name && me.cfg.dns.config && me.cfg.dns.config[f.key]) || "";
@@ -1260,6 +1588,12 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
         me.renderAcmeDNSCNAME();
       }, 50, me);
     }
+  },
+
+  // isPrimaryCredentialActive is true only for the credential loaded as the
+  // persisted primary, whose values the legacy dns fields mirror.
+  isPrimaryCredentialActive: function () {
+    return !this.credentials.length || this.loadedPrimaryId === this.activeCredentialId;
   },
 
   acmeDNSField: function (key) {
@@ -1326,7 +1660,8 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
       items: [me.fAcmeDNSServer, me.acmeDNSRegisterBtn]
     });
     var acmeDNSDraft = me.providerDrafts.acmedns;
-    var resolverValues = (me.cfg && me.cfg.dns && me.cfg.dns.resolvers) || [];
+    var activeCredential = me.activeCredentialEntry();
+    var resolverValues = (activeCredential && activeCredential.resolvers) || [];
     var resolverValue = acmeDNSDraft && acmeDNSDraft.resolverText !== undefined
       ? acmeDNSDraft.resolverText
       : (resolverValues.join(", ") || "1.1.1.1");
@@ -1392,8 +1727,21 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
     else { field.on("afterrender", bindDOM, me, { single: true }); }
   },
 
+  // acmeDNSDomain picks the first domain validated by the visible credential;
+  // unassigned domains belong to the first credential.
+  acmeDNSDomain: function () {
+    var me = this;
+    var cred = me.activeCredentialEntry();
+    var found = "";
+    Ext.each(me.fDomains ? me.domainList() : [], function (domain) {
+      var assigned = me.assignments[domain] || me.primaryCredentialName();
+      if (!found && (!cred || assigned === cred.name)) { found = domain; }
+    });
+    return found;
+  },
+
   acmeDNSCNAME: function () {
-    var domain = Ext.util.Format.trim((this.fDomains && this.fDomains.getValue()) || "").replace(/^\*\./, "");
+    var domain = this.acmeDNSDomain().replace(/^\*\./, "");
     var targetField = this.acmeDNSField("ACMEDNS_FULLDOMAIN");
     var target = Ext.util.Format.trim(targetField ? targetField.getValue() : "");
     return { source: domain ? "_acme-challenge." + domain + "." : "", target: target ? target.replace(/\.$/, "") + "." : "" };
@@ -1455,19 +1803,28 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
     me._acmeDNSRegistering = true;
     if (me.acmeDNSRegisterBtn) { me.acmeDNSRegisterBtn.setDisabled(true); }
     me.setStatus(SYNO.SDS.DNSACME.t("status.registeringAcmeDNS"));
+    var credential = me.activeCredentialEntry();
     SYNO.SDS.DNSACME.request("acmedns-register", "POST", { serverURL: server }, function (ok, data) {
       me._acmeDNSRegistering = false;
       if (me._closed) { return; }
       if (me.acmeDNSRegisterBtn) { me.acmeDNSRegisterBtn.setDisabled(false); }
       if (!ok) { me.setStatus(SYNO.SDS.DNSACME.t("status.saveFailed", { error: data }), true); return; }
-      me.hydrateAcmeDNSAccount(data, data.serverURL || server);
+      me.hydrateAcmeDNSAccount(data, data.serverURL || server, credential);
       me.renderAcmeDNSCNAME();
       me.setStatus(SYNO.SDS.DNSACME.t("status.acmeDNSRegistered"));
     }, me);
   },
 
-  hydrateAcmeDNSAccount: function (account, server) {
+  hydrateAcmeDNSAccount: function (account, server, credential) {
     var values = { ACMEDNS_USERNAME: account.username, ACMEDNS_PASSWORD: account.password, ACMEDNS_SUBDOMAIN: account.subdomain, ACMEDNS_FULLDOMAIN: account.fulldomain, ACMEDNS_SERVER_URL: server };
+    if (credential && credential !== this.activeCredentialEntry()) {
+      // The user switched credentials while registering; keep the one-time
+      // password with the credential that asked for it.
+      var draft = credential.providerDrafts.acmedns || {};
+      draft.config = Ext.apply(draft.config || {}, values);
+      credential.providerDrafts.acmedns = draft;
+      return;
+    }
     this.mergeProviderDraftConfig("acmedns", values);
     Ext.each(this.providerFields, function (field) {
       if (values[field.providerKey] !== undefined) { field.setValue(values[field.providerKey]); field.providerStoredValue = values[field.providerKey]; }
@@ -1520,13 +1877,8 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
     me.fCa.setValue(cfg.acme.ca || "letsencrypt");
     me.providerDrafts = {};
     me.renderedProviderName = null;
-    me._skipProviderDraftCapture = true;
-    try {
-      me.fProvider.setValue(cfg.dns.provider || (me.providers[0] && me.providers[0].name));
-      me.renderProviderFields();
-    } finally {
-      me._skipProviderDraftCapture = false;
-    }
+    me.loadCredentials(cfg);
+    me.renderAssignmentFields(true);
 
     var scheme = cfg.synology.scheme || "https";
     var host = cfg.synology.host || "127.0.0.1";
@@ -1568,28 +1920,20 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
 
   collectConfig: function () {
     var me = this;
-    me.captureProviderDraft();
-    var selectedProvider = me.fProvider.getValue();
-    var selectedDraft = me.providerDrafts[selectedProvider] || { config: {} };
-    var dnsConfig = Ext.apply({}, selectedDraft.config || {});
-    var domains = [];
-    Ext.each((me.fDomains.getValue() || "").split(/\r?\n|,/), function (d) {
-      d = Ext.util.Format.trim(d);
-      if (d) { domains.push(d); }
-    });
-    var resolvers = [];
-    if (selectedProvider === "acmedns") {
-      Ext.each((selectedDraft.resolverText || "").split(","), function (resolver) {
-        resolver = Ext.util.Format.trim(resolver);
-        if (resolver) { resolvers.push(resolver); }
-      });
-    } else {
-      resolvers = (me.cfg && me.cfg.dns && me.cfg.dns.resolvers) || ["1.1.1.1"];
-    }
+    me.stashActiveCredential();
+    me.captureAssignments();
+    var credentials = [];
+    Ext.each(me.credentials, function (cred) { credentials.push(me.credentialPayload(cred)); });
+    var primary = credentials[0];
+    var domains = me.domainList();
+    var assignments = {};
+    Ext.each(domains, function (d) { if (me.assignments[d]) { assignments[d] = me.assignments[d]; } });
     return {
       editToken: me.configEditToken,
       acme: { domains: domains, email: Ext.util.Format.trim(me.fEmail.getValue()), keyType: me.fKeyType.getValue(), ca: me.fCa.getValue() },
-      dns: { provider: selectedProvider, config: dnsConfig, resolvers: resolvers },
+      // The legacy fields mirror the first credential; the server folds a lone
+      // credential back into them and ignores the list in that case.
+      dns: { provider: primary.provider, config: primary.config, resolvers: primary.resolvers, credentials: credentials, assignments: assignments },
       synology: {
         scheme: me.fScheme.getValue(), host: Ext.util.Format.trim(me.fHost.getValue()) || "127.0.0.1",
         port: Number(me.fPort.getValue()), account: Ext.util.Format.trim(me.fAccount.getValue()),
@@ -1600,6 +1944,30 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
       // the server-provided values instead of synthesizing browser-side paths.
       runtime: (me.cfg && me.cfg.runtime) || {}
     };
+  },
+
+  // credentialPayload submits only the provider selected for a credential and
+  // its draft; drafts for unselected providers stay browser-local.
+  credentialPayload: function (cred) {
+    var selectedProvider = cred.provider;
+    var selectedDraft = cred.providerDrafts[selectedProvider] || { config: {} };
+    var dnsConfig = Ext.apply({}, selectedDraft.config || {});
+    var resolvers = [];
+    if (selectedProvider === "acmedns") {
+      Ext.each((selectedDraft.resolverText || "").split(","), function (resolver) {
+        resolver = Ext.util.Format.trim(resolver);
+        if (resolver) { resolvers.push(resolver); }
+      });
+    } else {
+      resolvers = cred.resolvers && cred.resolvers.length ? cred.resolvers : ["1.1.1.1"];
+    }
+    return { name: cred.name, previousName: cred.previousName, provider: selectedProvider, config: dnsConfig, resolvers: resolvers };
+  },
+
+  // markCredentialsSaved records the names the server now holds, so the next
+  // save can match redacted secrets of renamed credentials.
+  markCredentialsSaved: function () {
+    Ext.each(this.credentials, function (cred) { cred.previousName = cred.name; });
   },
 
   save: function (cb, scope, opts) {
@@ -1618,6 +1986,7 @@ Ext.define("SYNO.SDS.DNSACME.MainWindow", {
         return;
       }
       me.markStepClean(me.step);
+      me.markCredentialsSaved();
       if (opts.refresh === false) {
         // Step navigation only needs the saved config and optional test state.
         // Avoid a full applyConfig call because rebuilding dynamic fields would
