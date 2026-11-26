@@ -87,3 +87,10 @@
 
 - The deployed summary leaves the next-renewal slot absent rather than showing a potentially stale or inferred value.
 - This decision may be revisited if CertMagic adds a direct API for the active selected renewal time.
+
+### ADR-005: DSM Trust Is Operational State (2026-10-29)
+
+- **Context:** DSM trusted-device credentials and authentication checks change independently of the applied certificate and the browser's configuration edit token.
+- **Decision:** Store device credentials and deployment status in a private, atomic `config.yaml.auth.json` sibling, under a separate cross-process DSM-operation lock. Bind trust to the DSM endpoint/account/password; verify the current configuration before persisting network results. Keep OTPs and session credentials transient.
+- **Consequences:** Existing certificate hashes and successful-apply gates survive upgrades and reauthentication. Daily checks detect revoked trust; terminal authentication failures require explicit user sign-in instead of automatic retries. Failed renewal imports remain pending and are retried from certificate storage. ADR-001's explicit reconfiguration pause is unchanged.
+- **Reference:** https://github.com/mritd/dnsacme/issues/111

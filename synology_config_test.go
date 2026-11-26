@@ -787,7 +787,7 @@ func TestProviderMetadata_CompleteCatalog(t *testing.T) {
 
 func TestCGIMetadata_JSONCompatibility(t *testing.T) {
 	var out bytes.Buffer
-	if err := serveSynologyCGI(
+	if err := serveTestSynologyCGI(
 		context.Background(),
 		filepath.Join(t.TempDir(), "config.yaml"),
 		queryEnv("action=metadata", http.MethodGet),
@@ -1002,7 +1002,7 @@ func TestCGIConfigStatusLogsAndErrors(t *testing.T) {
 	appendSynologyLog(cfg, "hello")
 
 	var out bytes.Buffer
-	err := serveSynologyCGI(context.Background(), path, queryEnv("action=config", http.MethodGet), strings.NewReader(""), &out)
+	err := serveTestSynologyCGI(context.Background(), path, queryEnv("action=config", http.MethodGet), strings.NewReader(""), &out)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1016,7 +1016,7 @@ func TestCGIConfigStatusLogsAndErrors(t *testing.T) {
 	next.Runtime = SynologyRuntimeConfig{StorageDir: "/tmp/client-storage", StagingDir: "/tmp/client-staging", LogPath: "/tmp/client.log"}
 	body, _ := json.Marshal(next)
 	out.Reset()
-	err = serveSynologyCGI(context.Background(), path, queryEnv("action=config", http.MethodPost), bytes.NewReader(body), &out)
+	err = serveTestSynologyCGI(context.Background(), path, queryEnv("action=config", http.MethodPost), bytes.NewReader(body), &out)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1033,7 +1033,7 @@ func TestCGIConfigStatusLogsAndErrors(t *testing.T) {
 
 	for _, action := range []string{"metadata", "status", "logs"} {
 		out.Reset()
-		err = serveSynologyCGI(context.Background(), path, queryEnv("action="+action, http.MethodGet), strings.NewReader(""), &out)
+		err = serveTestSynologyCGI(context.Background(), path, queryEnv("action="+action, http.MethodGet), strings.NewReader(""), &out)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1043,7 +1043,7 @@ func TestCGIConfigStatusLogsAndErrors(t *testing.T) {
 	}
 
 	out.Reset()
-	err = serveSynologyCGI(context.Background(), path, queryEnv("action=missing", http.MethodGet), strings.NewReader(""), &out)
+	err = serveTestSynologyCGI(context.Background(), path, queryEnv("action=missing", http.MethodGet), strings.NewReader(""), &out)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1052,7 +1052,7 @@ func TestCGIConfigStatusLogsAndErrors(t *testing.T) {
 	}
 
 	out.Reset()
-	err = serveSynologyCGI(context.Background(), path, queryEnv("action=config", http.MethodPost), strings.NewReader("{"), &out)
+	err = serveTestSynologyCGI(context.Background(), path, queryEnv("action=config", http.MethodPost), strings.NewReader("{"), &out)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1061,7 +1061,7 @@ func TestCGIConfigStatusLogsAndErrors(t *testing.T) {
 	}
 
 	out.Reset()
-	err = serveSynologyCGI(context.Background(), path, queryEnv("action=test-run", http.MethodGet), strings.NewReader(""), &out)
+	err = serveTestSynologyCGI(context.Background(), path, queryEnv("action=test-run", http.MethodGet), strings.NewReader(""), &out)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1070,7 +1070,7 @@ func TestCGIConfigStatusLogsAndErrors(t *testing.T) {
 	}
 
 	out.Reset()
-	err = serveSynologyCGI(context.Background(), path, queryEnv("", http.MethodGet, "status"), strings.NewReader(""), &out)
+	err = serveTestSynologyCGI(context.Background(), path, queryEnv("", http.MethodGet, "status"), strings.NewReader(""), &out)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1414,7 +1414,7 @@ func TestCGITestRunAndApplyActions(t *testing.T) {
 		t.Fatal(err)
 	}
 	testBody := strings.NewReader(`{"editToken":` + strconv.Quote(snapshot.EditToken) + `}`)
-	err = serveSynologyCGI(context.Background(), path, queryEnv("action=test-run", http.MethodPost), testBody, &out)
+	err = serveTestSynologyCGI(context.Background(), path, queryEnv("action=test-run", http.MethodPost), testBody, &out)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1434,7 +1434,7 @@ func TestCGITestRunAndApplyActions(t *testing.T) {
 	writeStoredCert(t, cfg.Runtime.StorageDir, cfg.ACME.Domains[0])
 	out.Reset()
 	applyBody := strings.NewReader(`{"editToken":` + strconv.Quote(result.EditToken) + `}`)
-	err = serveSynologyCGI(context.Background(), path, queryEnv("action=apply", http.MethodPost), applyBody, &out)
+	err = serveTestSynologyCGI(context.Background(), path, queryEnv("action=apply", http.MethodPost), applyBody, &out)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1471,7 +1471,7 @@ func TestCGITaskActionsRejectStaleEditToken(t *testing.T) {
 			}
 			var out bytes.Buffer
 			body := strings.NewReader(`{"editToken":` + strconv.Quote(snapshot.EditToken) + `}`)
-			if err := serveSynologyCGI(context.Background(), path, queryEnv("action="+action, http.MethodPost), body, &out); err != nil {
+			if err := serveTestSynologyCGI(context.Background(), path, queryEnv("action="+action, http.MethodPost), body, &out); err != nil {
 				t.Fatal(err)
 			}
 			response := parseCGIResponse(t, out.String())
@@ -1998,7 +1998,7 @@ func TestSynologyDeployClientFailures(t *testing.T) {
 	u, _ := url.Parse(authFail.URL)
 	host, port, _ := strings.Cut(u.Host, ":")
 	client := newSynologyAPIClient(SynologyDeployConfig{Scheme: u.Scheme, Host: host, Port: atoiForTest(port)})
-	if err := client.login(context.Background()); err == nil || !strings.Contains(err.Error(), "bad auth") {
+	if err := client.login(context.Background()); err == nil || !strings.Contains(err.Error(), "code 400") || strings.Contains(err.Error(), "bad auth") {
 		t.Fatalf("expected auth failure, got %v", err)
 	}
 

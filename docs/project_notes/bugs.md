@@ -2,6 +2,13 @@
 
 Resolved bugs and their prevention notes are recorded here.
 
+### 2026-10-29 - Direct package CGI requests bypassed browser authorization
+
+- **Issue**: Direct configuration requests returned redacted state and an edit token without a DSM browser session.
+- **Root Cause**: Launcher visibility was incorrectly assumed to protect package CGI URLs.
+- **Solution**: Verify the active session using DSM authenticate.cgi, require actual administrator group membership, and require a package HMAC CSRF token bound to the verified user/session. The bootstrap is authenticated, same-origin and uncached. Require JSON for mutations. Keep browser authorization separate from unattended deployment authentication.
+- **Prevention**: Denial matrix covers every action, method and PATH_INFO alias before body reads. Cover forged identity, duplicate cookies, non-admin, missing/wrong token, unavailable verifier, session binding and concurrent bootstrap. Live native-helper bootstrap, authenticated read, bad CSRF and anonymous rejection passed on DSM 7.3.2 as the package user.
+
 ## Entry Format
 
 ### YYYY-MM-DD - Brief description
@@ -38,3 +45,17 @@ Resolved bugs and their prevention notes are recorded here.
 - **Root Cause**: The ACME-DNS issuer passed custom recursive resolvers to CertMagic but did not set `DNSManager.OverrideDomain`. CertMagic therefore ran generic SOA zone discovery against the original `_acme-challenge` name before calling the libdns provider.
 - **Solution**: For ACME-DNS only, normalize the saved `ACMEDNS_FULLDOMAIN` and pass it as CertMagic's override domain. Empty CLI values retain the previous generic behavior.
 - **Prevention**: Delegated DNS providers must explicitly connect their persisted delegation target to the solver's presentation and propagation-check target, with tests covering provider scoping and empty-value compatibility.
+
+### 2026-10-29 - DSM TOTP accounts failed certificate deployment with code 403
+
+- **Issue**: DSM accounts protected by TOTP could not authenticate for certificate import or unattended renewal (#111).
+- **Root Cause**: Login sent no OTP and did not retain a DSM trusted-device credential.
+- **Solution**: Add explicit OTP enrollment and reuse the returned device credential from private operational state. Freeze unattended retries after terminal authentication failures and expose recovery through the DSM sign-in action.
+- **Prevention**: Cover enrollment, credential reuse/redaction, revoked trust, pending imports and configuration conflicts in tests. Verify the real DSM protocol on-device; enrollment, OTP-free reuse and production import passed on DSM 7.3.2.
+
+### 2026-10-29 - DSM sign-in appeared outside connection setup and lacked clear cancellation
+
+- **Issue**: The sign-in action occupied the wizard footer and opened an unstyled Ext window with no explicit Cancel action.
+- **Root Cause**: The authentication UI was implemented as a global toolbar action and a separate generic window instead of part of the account connection flow.
+- **Solution**: Put sign-in below the account/password fields in Auto Update, with an inline form, local progress/error feedback, Cancel, a labeled close button and Escape. The running view opens a separate DSM connection card without reconfiguration.
+- **Prevention**: Exercise button placement, cancellation, cleared transient input, keyboard dismissal, retry after failure, late responses and unchanged deployed configuration in the Node-backed behavior test. Exclude transient authentication fields from wizard validation and dirty-state tracking.

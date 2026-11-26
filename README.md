@@ -141,6 +141,46 @@ Open **DNSACME** from the DSM main menu after installation. The normal setup flo
 4. Optionally run **Test Run**. This requests a fresh staging certificate and verifies DSM login, but does not import the certificate. After a successful test, wait at least 10 minutes before applying so DNS caches can discard the staging challenge.
 5. Run **Apply** whenever you are ready. This requests the selected production certificate and imports it into DSM. You may apply directly without a staging test, after acknowledging that a production validation failure can count against CA rate limits.
 
+#### DSM two-factor authentication
+
+Accounts protected by a six-digit TOTP code can register DNSACME as a trusted
+DSM device. In **Auto Update**, enter the DSM administrator account and password,
+then click **DSM sign-in** below the password. Enter the current code and a
+recognizable device name in the inline connection panel. Cancel, the close button
+and Escape dismiss the panel and clear an unsubmitted code.
+The sign-in action saves the account settings first but does not request or import
+a certificate. Accounts without 2FA can leave the code empty.
+
+- The OTP is used only for that sign-in request. DNSACME never stores a TOTP seed,
+  recovery code, OTP, DSM session ID, or CSRF token.
+- The returned trusted-device credential is stored beside `config.yaml` in
+  `config.yaml.auth.json`, with mode `0600` and package ownership. Treat this file
+  and configuration backups as credentials. The web UI only receives status,
+  never the device credential or the internal account fingerprint.
+- A device credential is bound to the configured DSM address, port, protocol,
+  account and password. Changing these settings requires signing in again.
+- Test Run, Apply and automatic deployment reuse the trusted device. DSM access
+  is checked daily while automatic renewal is running; any replacement device
+  credential returned by DSM is saved. DSM does not guarantee indefinite trust.
+- If DSM rejects authentication, automatic login attempts stop. DNSACME displays
+  the failure and sends a DSM administrator notification through `synodsmnotify`.
+  Open **DSM connection** from the running view and use **DSM sign-in** with a
+  fresh OTP to restore access, without entering reconfiguration or pausing
+  renewal. You can open this connection view at any time, including after a
+  successful sign-in. Leave the code empty to verify existing trusted-device
+  access. Notification delivery failures are logged and status remains visible.
+- If a renewed certificate cannot be imported, it stays marked as pending.
+  While renewal is enabled, DNSACME retries installing the stored certificate
+  hourly, or on its next monitoring cycle after successful reauthentication.
+  It does not reissue a certificate just to retry an import. After a failed
+  initial Apply, run Apply again once authentication has been repaired.
+
+The first successful production Apply is still required before automatic renewal
+starts. Explicit reconfiguration still pauses renewal until Apply succeeds.
+See [the DSM 2FA request](https://github.com/mritd/dnsacme/issues/111) and
+[acme.sh's Synology guide](https://github.com/acmesh-official/acme.sh/wiki/Synology-NAS-Guide)
+for the trusted-device protocol reference.
+
 #### Why a DSM administrator password is required
 
 Certificate deployment follows the same approach as the acme.sh Synology deploy hook:
