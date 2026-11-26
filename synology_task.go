@@ -182,55 +182,42 @@ func runSynologyApplyForEditToken(ctx context.Context, configPath, expectedEditT
 		return newSynologyTaskResult(starting, "failed"), err
 	}
 
-	keyPath, certPath, err := findStoredCertificate(ctx, runtime.StorageDir, cfg.ACME.Domains[0])
-	if err != nil {
+	fail := func(logMessage string, err error) (synologyTaskResult, error) {
 		if current, _, saveErr := recordSynologyApplyState(configPath, startingHash, startingEditToken, SynologyOperationState{Success: false, At: time.Now(), ConfigHash: startingHash, Message: err.Error()}, false); saveErr == nil {
 			starting = current
 		}
-		appendSynologyLog(cfg, "certificate lookup failed: "+err.Error())
-		return newSynologyTaskResult(starting, "failed"), err
-	}
-	matches, err := privateKeyMatchesKeyType(keyPath, cfg.ACME.KeyType)
-	if err != nil {
-		if current, _, saveErr := recordSynologyApplyState(configPath, startingHash, startingEditToken, SynologyOperationState{Success: false, At: time.Now(), ConfigHash: startingHash, Message: err.Error()}, false); saveErr == nil {
-			starting = current
+		if logMessage != "" {
+			appendSynologyLog(cfg, logMessage+err.Error())
 		}
-		appendSynologyLog(cfg, "certificate key inspection failed: "+err.Error())
 		return newSynologyTaskResult(starting, "failed"), err
 	}
-	if !matches {
+
+	certificates, mismatched, err := locateSynologyCertificates(ctx, runtime.StorageDir, cfg)
+	if err != nil {
+		return fail("certificate lookup failed: ", err)
+	}
+	if len(mismatched) > 0 {
 		// CertMagic may reuse a valid cached certificate after the requested key
-		// type changes. Remove only this identifier's cached material, then obtain
-		// again so DSM receives a key with the selected size.
+		// type changes. Remove only the affected identifiers' cached material, then
+		// obtain again so DSM receives keys with the selected size.
 		appendSynologyLog(cfg, "stored certificate key type does not match current configuration; requesting replacement")
-		if err := removeStoredCertificate(runtime.StorageDir, cfg.ACME.Domains[0]); err != nil {
-			if current, _, saveErr := recordSynologyApplyState(configPath, startingHash, startingEditToken, SynologyOperationState{Success: false, At: time.Now(), ConfigHash: startingHash, Message: err.Error()}, false); saveErr == nil {
-				starting = current
+		for _, identifier := range mismatched {
+			if err := removeStoredCertificate(runtime.StorageDir, identifier); err != nil {
+				return fail("stored certificate cleanup failed: ", err)
 			}
-			appendSynologyLog(cfg, "stored certificate cleanup failed: "+err.Error())
-			return newSynologyTaskResult(starting, "failed"), err
 		}
 		if err := ObtainOnce(ctx, &runtime, false); err != nil {
-			if current, _, saveErr := recordSynologyApplyState(configPath, startingHash, startingEditToken, SynologyOperationState{Success: false, At: time.Now(), ConfigHash: startingHash, Message: err.Error()}, false); saveErr == nil {
-				starting = current
-			}
-			appendSynologyLog(cfg, "replacement production ACME issuance failed: "+err.Error())
-			return newSynologyTaskResult(starting, "failed"), err
+			return fail("replacement production ACME issuance failed: ", err)
 		}
-		keyPath, certPath, err = findStoredCertificate(ctx, runtime.StorageDir, cfg.ACME.Domains[0])
+		certificates, _, err = locateSynologyCertificates(ctx, runtime.StorageDir, cfg)
 		if err != nil {
-			if current, _, saveErr := recordSynologyApplyState(configPath, startingHash, startingEditToken, SynologyOperationState{Success: false, At: time.Now(), ConfigHash: startingHash, Message: err.Error()}, false); saveErr == nil {
-				starting = current
-			}
-			appendSynologyLog(cfg, "replacement certificate lookup failed: "+err.Error())
-			return newSynologyTaskResult(starting, "failed"), err
+			return fail("replacement certificate lookup failed: ", err)
 		}
 	}
-	if err := deploySynologyStoredCertificate(ctx, cfg, cfg.ACME.Domains[0], keyPath, certPath); err != nil {
-		if current, _, saveErr := recordSynologyApplyState(configPath, startingHash, startingEditToken, SynologyOperationState{Success: false, At: time.Now(), ConfigHash: startingHash, Message: err.Error()}, false); saveErr == nil {
-			starting = current
+	for _, certificate := range certificates {
+		if err := deploySynologyStoredCertificate(ctx, cfg, certificate.identifier, certificate.keyPath, certificate.certPath); err != nil {
+			return fail("", err)
 		}
-		return newSynologyTaskResult(starting, "failed"), err
 	}
 
 	var updated bool
@@ -370,6 +357,22 @@ func validateConfigForSynology(cfg SynologyConfig, requireDeploy bool) error {
 			return err
 		}
 	}
+	// Credential checks need the canonical account list, while deployment checks
+	// below must see the raw values so defaults cannot mask missing input.
+	normalized := normalizeSynologyConfig(cfg)
+	if err := validateSynologyDNSCredentials(normalized.DNS, normalized.ACME.Domains); err != nil {
+		return err
+	}
+	for _, credential := range normalized.DNS.Credentials {
+		if len(credential.Config) == 0 {
+			return fmt.Errorf("DNS credential %s config is empty", credential.Name)
+		}
+		if credential.Provider == provider.AcmeDNS {
+			if err := validateSynologyResolvers(credential.Resolvers); err != nil {
+				return fmt.Errorf("DNS credential %s: %w", credential.Name, err)
+			}
+		}
+	}
 	if _, err := validateConfig(cfg.RuntimeConfig(true)); err != nil {
 		return err
 	}
@@ -385,11 +388,18 @@ func validateConfigForSynology(cfg SynologyConfig, requireDeploy bool) error {
 	if stringsTrim(cfg.Synology.CertificateDesc) == "" && !cfg.Synology.Create {
 		return errors.New("certificate description is required when create is disabled")
 	}
-	if len(cfg.ACME.Domains) > 1 {
-		return errors.New("Synology DSM deployment supports exactly one certificate identifier")
-	}
-	if !certmagic.SubjectQualifiesForPublicCert(cfg.ACME.Domains[0]) {
-		return fmt.Errorf("invalid public certificate identifier: %s", cfg.ACME.Domains[0])
+	descriptions := make(map[string]string, len(cfg.ACME.Domains))
+	for _, domain := range cfg.ACME.Domains {
+		if !certmagic.SubjectQualifiesForPublicCert(domain) {
+			return fmt.Errorf("invalid public certificate identifier: %s", domain)
+		}
+		// CertMagic manages one certificate per identifier, and each one replaces
+		// the DSM certificate with its description, so descriptions must differ.
+		desc := synologyCertificateDesc(cfg, domain)
+		if other, ok := descriptions[desc]; ok {
+			return fmt.Errorf("domains %s and %s map to the same DSM certificate description %q", other, domain, desc)
+		}
+		descriptions[desc] = domain
 	}
 	return nil
 }
@@ -428,14 +438,68 @@ func firstSynologyIdentifier(cfg SynologyConfig) string {
 	return cfg.ACME.Domains[0]
 }
 
+// synologyCertificateDesc keeps the configured description for a single
+// identifier, which preserves existing DSM certificates on upgrade. With several
+// identifiers each one gets its own DSM certificate named after it.
+func synologyCertificateDesc(cfg SynologyConfig, identifier string) string {
+	desc := stringsTrim(cfg.Synology.CertificateDesc)
+	if len(cfg.ACME.Domains) <= 1 {
+		return desc
+	}
+	if desc == "" {
+		return identifier
+	}
+	return desc + " " + identifier
+}
+
+// synologyDeployConfigFor targets the DSM certificate owned by one identifier.
+// Only the first identifier may become DSM's default certificate; letting every
+// import claim the default would leave it on whichever renewed last.
+func synologyDeployConfigFor(cfg SynologyConfig, identifier string) SynologyDeployConfig {
+	deploy := cfg.Synology
+	deploy.CertificateDesc = synologyCertificateDesc(cfg, identifier)
+	if deploy.AsDefault && identifier != firstSynologyIdentifier(cfg) {
+		deploy.AsDefault = false
+	}
+	return deploy
+}
+
 func deploySynologyStoredCertificate(ctx context.Context, cfg SynologyConfig, identifier, keyPath, certPath string) error {
 	appendSynologyLog(cfg, "importing certificate into Synology DSM for "+identifier)
-	if err := deploySynologyCertificate(ctx, cfg.Synology, keyPath, certPath); err != nil {
+	if err := deploySynologyCertificate(ctx, synologyDeployConfigFor(cfg, identifier), keyPath, certPath); err != nil {
 		appendSynologyLog(cfg, "Synology DSM import failed: "+err.Error())
 		return err
 	}
 	appendSynologyLog(cfg, "Synology DSM import succeeded")
 	return nil
+}
+
+type synologyStoredCertificate struct {
+	identifier string
+	keyPath    string
+	certPath   string
+}
+
+// locateSynologyCertificates resolves every configured identifier's stored
+// files and reports identifiers whose cached key no longer matches the key type.
+func locateSynologyCertificates(ctx context.Context, storageDir string, cfg SynologyConfig) ([]synologyStoredCertificate, []string, error) {
+	certificates := make([]synologyStoredCertificate, 0, len(cfg.ACME.Domains))
+	var mismatched []string
+	for _, identifier := range cfg.ACME.Domains {
+		keyPath, certPath, err := findStoredCertificate(ctx, storageDir, identifier)
+		if err != nil {
+			return nil, nil, err
+		}
+		matches, err := privateKeyMatchesKeyType(keyPath, cfg.ACME.KeyType)
+		if err != nil {
+			return nil, nil, fmt.Errorf("certificate key inspection failed: %w", err)
+		}
+		if !matches {
+			mismatched = append(mismatched, identifier)
+		}
+		certificates = append(certificates, synologyStoredCertificate{identifier: identifier, keyPath: keyPath, certPath: certPath})
+	}
+	return certificates, mismatched, nil
 }
 
 // findStoredCertificate reuses the command-hook path resolver so manual apply

@@ -57,6 +57,9 @@ const (
 	defaultSynologyConfigPath = "/var/packages/dnsacme/etc/config.yaml"
 	defaultSynologyLogPath    = "/var/packages/dnsacme/var/dnsacme.log"
 	defaultSynologyResolver   = "1.1.1.1"
+	// synologyDefaultCredentialName labels the single legacy provider account
+	// when the UI or secret merge needs to address it by name.
+	synologyDefaultCredentialName = "default"
 )
 
 var (
@@ -85,11 +88,26 @@ type SynologyACMEConfig struct {
 	CA      string   `json:"ca" yaml:"ca"`
 }
 
-// SynologyDNSConfig stores one provider name and its provider-specific values.
+// SynologyDNSConfig stores the primary provider account and, when several
+// accounts are configured, every named account plus the account assigned to
+// each certificate identifier. Provider, Config, and Resolvers always mirror
+// the first credential so single-account configs keep their original shape.
 type SynologyDNSConfig struct {
-	Provider  string            `json:"provider" yaml:"provider"`
-	Config    map[string]string `json:"config" yaml:"config"`
-	Resolvers []string          `json:"resolvers" yaml:"resolvers"`
+	Provider    string                  `json:"provider" yaml:"provider"`
+	Config      map[string]string       `json:"config" yaml:"config"`
+	Resolvers   []string                `json:"resolvers" yaml:"resolvers"`
+	Credentials []SynologyDNSCredential `json:"credentials,omitempty" yaml:"credentials,omitempty"`
+	Assignments map[string]string       `json:"assignments,omitempty" yaml:"assignments,omitempty"`
+}
+
+// SynologyDNSCredential is one named DNS provider account. PreviousName is a
+// request-only hint that lets a renamed account keep its redacted secrets.
+type SynologyDNSCredential struct {
+	Name         string            `json:"name" yaml:"name"`
+	Provider     string            `json:"provider" yaml:"provider"`
+	Config       map[string]string `json:"config" yaml:"config"`
+	Resolvers    []string          `json:"resolvers" yaml:"resolvers"`
+	PreviousName string            `json:"previousName,omitempty" yaml:"-"`
 }
 
 // SynologyDeployConfig identifies a DSM API endpoint and import behavior. HTTP
@@ -416,6 +434,7 @@ func normalizeSynologyConfig(cfg SynologyConfig) SynologyConfig {
 		cfg.DNS.Config = map[string]string{}
 	}
 	cfg.DNS.Resolvers = normalizeSynologyResolvers(cfg.DNS.Resolvers)
+	cfg.DNS = normalizeSynologyDNSCredentials(cfg.DNS, cfg.ACME.Domains)
 	if cfg.Synology.Scheme == "" {
 		cfg.Synology.Scheme = def.Synology.Scheme
 	}
@@ -439,6 +458,135 @@ func normalizeSynologyConfig(cfg SynologyConfig) SynologyConfig {
 		cfg.Runtime.LogPath = def.Runtime.LogPath
 	}
 	return cfg
+}
+
+// normalizeSynologyDNSCredentials mirrors the first credential into the legacy
+// fields and assigns every unassigned identifier to it. A lone credential is
+// folded back into the legacy single-account shape, so its ConfigHash matches
+// configurations written before multiple accounts existed. Unknown assignment
+// names are preserved for validateSynologyDNSCredentials to report.
+func normalizeSynologyDNSCredentials(dns SynologyDNSConfig, domains []string) SynologyDNSConfig {
+	if len(dns.Credentials) == 0 {
+		dns.Credentials = nil
+		dns.Assignments = nil
+		return dns
+	}
+	credentials := make([]SynologyDNSCredential, 0, len(dns.Credentials))
+	for _, credential := range dns.Credentials {
+		credential.Name = strings.TrimSpace(credential.Name)
+		credential.Provider = strings.ToLower(strings.TrimSpace(credential.Provider))
+		credential.Config = cloneStringMap(credential.Config)
+		credential.Resolvers = normalizeSynologyResolvers(credential.Resolvers)
+		credential.PreviousName = ""
+		credentials = append(credentials, credential)
+	}
+	primary := credentials[0]
+	if primary.Provider != "" {
+		dns.Provider = primary.Provider
+	}
+	dns.Config = cloneStringMap(primary.Config)
+	dns.Resolvers = append([]string(nil), primary.Resolvers...)
+	if len(credentials) == 1 {
+		dns.Credentials = nil
+		dns.Assignments = nil
+		return dns
+	}
+	assignments := make(map[string]string, len(domains))
+	for _, domain := range domains {
+		name := strings.TrimSpace(dns.Assignments[domain])
+		if name == "" {
+			name = primary.Name
+		}
+		assignments[domain] = name
+	}
+	dns.Credentials = credentials
+	dns.Assignments = assignments
+	return dns
+}
+
+// EffectiveCredentials lists the configured accounts, presenting a legacy
+// single-account config as one credential named "default".
+func (dns SynologyDNSConfig) EffectiveCredentials() []SynologyDNSCredential {
+	if len(dns.Credentials) > 0 {
+		return dns.Credentials
+	}
+	return []SynologyDNSCredential{{
+		Name:      synologyDefaultCredentialName,
+		Provider:  dns.Provider,
+		Config:    dns.Config,
+		Resolvers: dns.Resolvers,
+	}}
+}
+
+// CredentialFor returns the account assigned to one certificate identifier.
+func (dns SynologyDNSConfig) CredentialFor(identifier string) (SynologyDNSCredential, bool) {
+	credentials := dns.EffectiveCredentials()
+	if len(dns.Credentials) == 0 {
+		return credentials[0], true
+	}
+	name := dns.Assignments[identifier]
+	for _, credential := range credentials {
+		if credential.Name == name {
+			return credential, true
+		}
+	}
+	return SynologyDNSCredential{}, false
+}
+
+// validateSynologyDNSCredentials checks the account structure that the UI can
+// submit: unique non-empty names, assignments to existing accounts, and one
+// account per DNS-01 challenge name, which wildcard and apex names share.
+func validateSynologyDNSCredentials(dns SynologyDNSConfig, domains []string) error {
+	if len(dns.Credentials) == 0 {
+		return nil
+	}
+	names := make(map[string]struct{}, len(dns.Credentials))
+	for _, credential := range dns.Credentials {
+		name := strings.TrimSpace(credential.Name)
+		if name == "" {
+			return errors.New("DNS credential name is empty")
+		}
+		if !validSynologyCredentialName(name) {
+			return fmt.Errorf("invalid DNS credential name: %q", name)
+		}
+		if _, ok := names[name]; ok {
+			return fmt.Errorf("duplicate DNS credential name: %s", name)
+		}
+		names[name] = struct{}{}
+		if strings.TrimSpace(credential.Provider) == "" {
+			return fmt.Errorf("DNS credential %s has no provider", name)
+		}
+	}
+	challengeOwners := make(map[string]string, len(domains))
+	for _, domain := range domains {
+		name := strings.TrimSpace(dns.Assignments[domain])
+		if name == "" {
+			name = strings.TrimSpace(dns.Credentials[0].Name)
+		}
+		if _, ok := names[name]; !ok {
+			return fmt.Errorf("domain %s is assigned to unknown DNS credential %s", domain, name)
+		}
+		key := dnsRouteKey(domain)
+		if owner, ok := challengeOwners[key]; ok && owner != name {
+			return fmt.Errorf("domains sharing the _acme-challenge.%s record must use the same DNS credential", key)
+		}
+		challengeOwners[key] = name
+	}
+	return nil
+}
+
+// validSynologyCredentialName limits names to a plain charset because the UI
+// shows them in controls that render their text as HTML.
+func validSynologyCredentialName(name string) bool {
+	if len(name) > 64 {
+		return false
+	}
+	for _, r := range name {
+		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '.' || r == '-' || r == '_') {
+			return false
+		}
+	}
+	return true
 }
 
 // normalizeSynologyKeyType keeps file and API input aligned with the wizard's
@@ -527,6 +675,20 @@ func (cfg SynologyConfig) RuntimeConfig(staging bool) Config {
 	if cfg.DNS.Provider == provider.AcmeDNS {
 		runtime.DNSResolvers = append([]string(nil), cfg.DNS.Resolvers...)
 	}
+	if len(cfg.DNS.Credentials) > 0 {
+		runtime.DNSRoutes = make(map[string]DNSRoute, len(cfg.ACME.Domains))
+		for _, domain := range cfg.ACME.Domains {
+			credential, ok := cfg.DNS.CredentialFor(domain)
+			if !ok {
+				continue
+			}
+			route := DNSRoute{Provider: credential.Provider, Config: cloneStringMap(credential.Config)}
+			if credential.Provider == provider.AcmeDNS {
+				route.Resolvers = append([]string(nil), credential.Resolvers...)
+			}
+			runtime.DNSRoutes[domain] = route
+		}
+	}
 	// Staging always uses its own storage root so its untrusted certificate can
 	// never be confused with the production one by the suffix-matching certificate
 	// lookup in hookEnv. Apply and background renewal always use the selected
@@ -568,6 +730,10 @@ func (cfg SynologyConfig) ConfigHash() string {
 		DNS struct {
 			Provider string            `json:"provider"`
 			Config   map[string]string `json:"config"`
+			// Multi-account fields are omitted for single-account configs so their
+			// hash keeps the shape used before multiple accounts existed.
+			Credentials []hashedCredential `json:"credentials,omitempty"`
+			Assignments map[string]string  `json:"assignments,omitempty"`
 		} `json:"dns"`
 		Synology           SynologyDeployConfig  `json:"synology"`
 		Runtime            SynologyRuntimeConfig `json:"runtime"`
@@ -587,9 +753,25 @@ func (cfg SynologyConfig) ConfigHash() string {
 	shape.ACME.CA = cfg.ACME.CA
 	shape.DNS.Provider = cfg.DNS.Provider
 	shape.DNS.Config = cfg.DNS.Config
+	for _, credential := range cfg.DNS.Credentials {
+		shape.DNS.Credentials = append(shape.DNS.Credentials, hashedCredential{
+			Name:     credential.Name,
+			Provider: credential.Provider,
+			Config:   credential.Config,
+		})
+	}
+	shape.DNS.Assignments = cfg.DNS.Assignments
 	data, _ := json.Marshal(shape)
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
+}
+
+// hashedCredential is the ConfigHash view of one DNS account; resolvers are
+// operational and excluded, as they are for the primary account.
+type hashedCredential struct {
+	Name     string            `json:"name"`
+	Provider string            `json:"provider"`
+	Config   map[string]string `json:"config"`
 }
 
 // RenewalRuntimeKey identifies the CertMagic manager inputs that must trigger a
@@ -598,11 +780,21 @@ func (cfg SynologyConfig) ConfigHash() string {
 func (cfg SynologyConfig) RenewalRuntimeKey() string {
 	cfg = normalizeSynologyConfig(cfg)
 	shape := struct {
-		ConfigHash string   `json:"configHash"`
-		Resolvers  []string `json:"resolvers"`
+		ConfigHash          string              `json:"configHash"`
+		Resolvers           []string            `json:"resolvers"`
+		CredentialResolvers map[string][]string `json:"credentialResolvers,omitempty"`
 	}{ConfigHash: cfg.ConfigHash()}
 	if cfg.DNS.Provider == provider.AcmeDNS {
 		shape.Resolvers = cfg.DNS.Resolvers
+	}
+	for _, credential := range cfg.DNS.Credentials {
+		if credential.Provider != provider.AcmeDNS {
+			continue
+		}
+		if shape.CredentialResolvers == nil {
+			shape.CredentialResolvers = map[string][]string{}
+		}
+		shape.CredentialResolvers[credential.Name] = credential.Resolvers
 	}
 	data, _ := json.Marshal(shape)
 	sum := sha256.Sum256(data)
@@ -628,11 +820,15 @@ func (cfg SynologyConfig) CanRenew() bool {
 // with a stable sentinel and removing internal authorization hashes.
 func (cfg SynologyConfig) Redacted() SynologyConfig {
 	cfg = normalizeSynologyConfig(cfg)
-	cfg.DNS.Config = cloneStringMap(cfg.DNS.Config)
-	for key := range cfg.DNS.Config {
-		if isSecretProviderKey(key) && cfg.DNS.Config[key] != "" {
-			cfg.DNS.Config[key] = "********"
-		}
+	cfg.DNS.Config = redactProviderConfig(cfg.DNS.Config)
+	credentials := make([]SynologyDNSCredential, 0, len(cfg.DNS.Credentials))
+	for _, credential := range cfg.DNS.Credentials {
+		credential.Config = redactProviderConfig(credential.Config)
+		credential.Resolvers = append([]string(nil), credential.Resolvers...)
+		credentials = append(credentials, credential)
+	}
+	if len(credentials) > 0 {
+		cfg.DNS.Credentials = credentials
 	}
 	if cfg.Synology.Password != "" {
 		cfg.Synology.Password = "********"
@@ -642,20 +838,47 @@ func (cfg SynologyConfig) Redacted() SynologyConfig {
 	return cfg
 }
 
+func redactProviderConfig(config map[string]string) map[string]string {
+	config = cloneStringMap(config)
+	for key := range config {
+		if isSecretProviderKey(key) && config[key] != "" {
+			config[key] = "********"
+		}
+	}
+	return config
+}
+
 // mergeSecrets reverses API redaction during a form save. Present masked or blank
 // required/secret fields preserve an existing value, while optional non-secret
 // blanks clear normally. Omitted keys remain omitted.
 func mergeSecrets(next, current SynologyConfig) SynologyConfig {
-	for key, value := range next.DNS.Config {
-		if value == "********" {
-			// A sentinel is never a credential. Restore an existing value or clear it
-			// on first configuration so validation reports the missing secret.
-			next.DNS.Config[key] = current.DNS.Config[key]
-			continue
+	mergeProviderSecrets(next.DNS.Config, current.DNS.Config)
+	// Named accounts match their persisted counterpart by the name the browser
+	// loaded, so renaming an account keeps its redacted secrets.
+	currentCredentials := current.DNS.EffectiveCredentials()
+	for i := range next.DNS.Credentials {
+		credential := &next.DNS.Credentials[i]
+		name := credential.PreviousName
+		if name == "" {
+			name = credential.Name
 		}
-		if value == "" && current.DNS.Config[key] != "" && (isSecretProviderKey(key) || isRequiredProviderKey(key)) {
-			next.DNS.Config[key] = current.DNS.Config[key]
+		var persisted map[string]string
+		for _, candidate := range currentCredentials {
+			if candidate.Name == name {
+				persisted = candidate.Config
+				break
+			}
 		}
+		// A lone credential is stored in the legacy shape under the name
+		// "default", so the browser may still address it by its own name. The
+		// first credential always mirrors the persisted primary account.
+		if persisted == nil && i == 0 {
+			persisted = current.DNS.Config
+		}
+		if credential.Config == nil {
+			credential.Config = map[string]string{}
+		}
+		mergeProviderSecrets(credential.Config, persisted)
 	}
 	if next.Synology.Password == "********" {
 		next.Synology.Password = current.Synology.Password
@@ -663,6 +886,21 @@ func mergeSecrets(next, current SynologyConfig) SynologyConfig {
 		next.Synology.Password = current.Synology.Password
 	}
 	return next
+}
+
+// mergeProviderSecrets applies the mergeSecrets rules to one provider config.
+func mergeProviderSecrets(next, current map[string]string) {
+	for key, value := range next {
+		if value == "********" {
+			// A sentinel is never a credential. Restore an existing value or clear it
+			// on first configuration so validation reports the missing secret.
+			next[key] = current[key]
+			continue
+		}
+		if value == "" && current[key] != "" && (isSecretProviderKey(key) || isRequiredProviderKey(key)) {
+			next[key] = current[key]
+		}
+	}
 }
 
 func cloneStringMap(in map[string]string) map[string]string {

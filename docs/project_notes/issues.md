@@ -25,3 +25,12 @@ Ticket-related work can be recorded here using concise dated entries.
 - **URL**: https://github.com/mritd/dnsacme/issues/113
 - **Notes**: Long-term static access keys are required; session tokens are intentionally unsupported since STS credentials expire before renewal. Upstream calls `log.Fatalf` when AWS config loading fails (still possible via invalid `AWS_*` env such as a missing `AWS_PROFILE`), so `newRoute53` preloads the config with the same options and returns an error. `WaitForRoute53Sync` is left off: its waiter gives up after one 30s poll and duplicates CertMagic authoritative-NS propagation checks. The Synology UI needs no change because non-ACME-DNS provider fields are rendered from backend metadata. Region defaults to `us-east-1`; hosted zone ID is optional. The AWS SDK adds about 5 MB to the default binary.
 - **Verification**: `go vet ./...`; `go test` with default, `synology`, `slim`, and `slim,route53` tags; fake-credential smoke call returned a 403 error, and `AWS_PROFILE=missing` now returns a constructor error instead of exiting. No real AWS issuance has been run.
+
+### 2026-11-01 - Fork: Multiple domains and DNS credentials in the Synology app
+
+- **Status**: Completed
+- **Description**: Allow several domains and named DNS provider credentials, with a new "Domain Mapping" wizard step assigning a credential to each domain.
+- **URL**: https://github.com/sgdc3/dnsacme
+- **Notes**: See ADR-005. `Config.DNSRoutes` and `routedDNS01Solver` route challenges per identifier; the Synology apply deploys one DSM certificate per domain.
+- **Verification**: `go vet ./...` with default and `synology` tags; `go test` with default, `synology`, and `slim` tags. The DSM UI has not been exercised in a real DSM session.
+

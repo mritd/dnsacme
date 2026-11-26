@@ -9,15 +9,20 @@ import (
 // Config contains the provider-independent inputs used to build one CertMagic
 // runtime. Synology derives this value from its persisted package config.
 type Config struct {
-	Domains       []string
-	Email         string
-	ZeroSSLCA     bool
-	CA            string // Explicit ACME directory URL; bypasses ZeroSSL and its EAB branch.
-	StorageDir    string
-	KeyType       string
-	DNSProvider   string
-	DNSConfig     map[string]string
-	DNSResolvers  []string
+	Domains      []string
+	Email        string
+	ZeroSSLCA    bool
+	CA           string // Explicit ACME directory URL; bypasses ZeroSSL and its EAB branch.
+	StorageDir   string
+	KeyType      string
+	DNSProvider  string
+	DNSConfig    map[string]string
+	DNSResolvers []string
+	// DNSRoutes optionally solves DNS-01 challenges of specific identifiers with
+	// their own provider account. Identifiers without a route use DNSProvider and
+	// DNSConfig. Wildcard and apex names share one challenge record, so a route
+	// for "*.example.com" also serves "example.com" unless that name has its own.
+	DNSRoutes     map[string]DNSRoute
 	ObtainingHook string
 	ObtainedHook  string
 	FailedHook    string
@@ -37,4 +42,12 @@ type Config struct {
 	EABHMACKey string // EAB HMAC Key
 
 	keyType certmagic.KeyType
+}
+
+// DNSRoute is one provider account used for the identifiers routed to it.
+// Resolvers are only honored for ACME-DNS, matching Config.DNSResolvers.
+type DNSRoute struct {
+	Provider  string
+	Config    map[string]string
+	Resolvers []string
 }

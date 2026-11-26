@@ -87,3 +87,31 @@
 
 - The deployed summary leaves the next-renewal slot absent rather than showing a potentially stale or inferred value.
 - This decision may be revisited if CertMagic adds a direct API for the active selected renewal time.
+
+### ADR-005: Multiple Domains Use Named DNS Credentials and One DSM Certificate Each (2026-11-01)
+
+**Context:**
+
+- Users need several domains whose DNS zones live at different providers or provider accounts.
+- CertMagic `ManageSync` manages one certificate per identifier and cannot issue a SAN certificate.
+- Existing single-provider configs must keep their `ConfigHash` so upgrades do not suspend renewal (see ADR-001).
+
+**Decision:**
+
+- `dns.credentials` holds named provider accounts and `dns.assignments` maps each domain to one of them; unassigned domains use the first credential.
+- `dns.provider`, `dns.config`, and `dns.resolvers` always mirror the first credential. A lone credential is folded back into that legacy shape, and `ConfigHash` omits the multi-account fields when empty.
+- A routing `acmez.Solver` dispatches each DNS-01 challenge to a per-credential `certmagic.DNS01Solver`, so ACME-DNS override domains and resolvers stay per account (extends ADR-002).
+- Each domain is imported into DSM as its own certificate named `<description> <domain>`; only the first domain may become DSM's default. A single domain keeps the bare description.
+- Domains sharing an `_acme-challenge` record (apex and wildcard) must use the same credential.
+
+**Alternatives Considered:**
+
+- One SAN certificate for all domains. Rejected because CertMagic's management API is per identifier, and bypassing it would lose its renewal handling.
+- Treating the legacy fields as a separate "default" account beside the list. Rejected because two sources of truth complicate secret merging and hashing.
+
+**Consequences:**
+
+- Upgrading single-domain configs is transparent; adding a second domain or credential changes the hash and requires Apply.
+- Renamed credentials keep redacted secrets through a request-only `previousName`.
+- Users serving several domains from DSM assign the per-domain certificates to services in DSM.
+

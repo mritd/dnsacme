@@ -79,9 +79,18 @@ func startACMEManagement(ctx context.Context, conf *Config, emitHooks bool) (fun
 
 	acmeLogger := newACMELogger()
 
+	routes, err := dnsRouteSolversForConfig(conf)
+	if err != nil {
+		return nil, err
+	}
+
 	magic := newCertMagicConfig(conf, acmeLogger)
 	magic, cache := newManagedConfigWithCache(magic, acmeLogger)
-	magic.Issuers = []certmagic.Issuer{newACMEIssuer(conf, magic, dnsProvider, acmeLogger)}
+	issuer := newACMEIssuer(conf, magic, dnsProvider, acmeLogger)
+	if len(routes) > 0 {
+		issuer.DNS01Solver = &routedDNS01Solver{fallback: issuer.DNS01Solver, routes: routes}
+	}
+	magic.Issuers = []certmagic.Issuer{issuer}
 
 	if err = manageCertificates(ctx, magic, conf.Domains); err != nil {
 		cache.Stop()
@@ -198,25 +207,13 @@ func newCertMagicConfig(conf *Config, logger *zap.Logger) *certmagic.Config {
 }
 
 func newACMEIssuer(conf *Config, magic *certmagic.Config, dnsProvider certmagic.DNSProvider, logger *zap.Logger) *certmagic.ACMEIssuer {
-	var resolvers []string
-	var overrideDomain string
-	if strings.EqualFold(conf.DNSProvider, provider.AcmeDNS) {
-		resolvers = append([]string(nil), conf.DNSResolvers...)
-		overrideDomain = strings.TrimSuffix(strings.TrimSpace(conf.DNSConfig[provider.AcmeDNSFullDomain]), ".")
-	}
 	issuer := certmagic.NewACMEIssuer(magic, certmagic.ACMEIssuer{
 		Agreed:                  true,
 		DisableHTTPChallenge:    true,
 		DisableTLSALPNChallenge: true,
 		Email:                   conf.Email,
-		DNS01Solver: &certmagic.DNS01Solver{
-			DNSManager: certmagic.DNSManager{
-				DNSProvider:    dnsProvider,
-				Resolvers:      resolvers,
-				OverrideDomain: overrideDomain,
-			},
-		},
-		Logger: logger,
+		DNS01Solver:             newDNS01Solver(conf.DNSProvider, conf.DNSConfig, conf.DNSResolvers, dnsProvider),
+		Logger:                  logger,
 	})
 
 	// An explicit endpoint is used by staging and custom-CA callers. ZeroSSLCA
